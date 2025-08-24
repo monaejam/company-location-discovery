@@ -54,9 +54,20 @@ export async function discoverBatchCompanies(companies: CompanyRequest[]) {
   })
 }
 
-export async function uploadCSV(file: File) {
+export async function uploadCSV(file: File, apiKeys: {
+  openai_api_key: string
+  google_maps_api_key?: string
+  tavily_api_key?: string
+}) {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('openai_api_key', apiKeys.openai_api_key)
+  if (apiKeys.google_maps_api_key) {
+    formData.append('google_maps_api_key', apiKeys.google_maps_api_key)
+  }
+  if (apiKeys.tavily_api_key) {
+    formData.append('tavily_api_key', apiKeys.tavily_api_key)
+  }
 
   const response = await fetch(`${API_BASE_URL}/discover/upload`, {
     method: 'POST',

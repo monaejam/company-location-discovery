@@ -122,9 +122,11 @@ export default function BatchUpload({ type, onJobCreated }: BatchUploadProps) {
     setError(null)
 
     try {
-      // For CSV upload, we'll need to modify the uploadCSV function to accept API keys
-      // For now, this is a simplified version - you may need to update the API
-      const response = await uploadCSV(file)
+      const response = await uploadCSV(file, {
+        openai_api_key: openaiKey.trim(),
+        google_maps_api_key: googleMapsKey.trim() || undefined,
+        tavily_api_key: tavilyKey.trim() || undefined
+      })
       onJobCreated(response.job_id)
       
       // Reset form

@@ -2,7 +2,7 @@
 FastAPI Backend for Company Location Discovery
 Users provide their own API keys - no server-side environment variables needed
 """
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -206,6 +206,97 @@ async def discover_batch_companies(
         "companies_count": len(request.companies),
         "message": f"Batch job queued with {len(request.companies)} companies"
     }
+
+@app.post("/discover/upload", tags=["Discovery"])
+async def upload_csv_companies(
+    file: UploadFile = File(...),
+    openai_api_key: str = Form(...),
+    google_maps_api_key: Optional[str] = Form(None),
+    tavily_api_key: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    Upload CSV file and process companies in batch
+    
+    CSV format: company_name,company_url
+    Maximum 100 companies per file
+    """
+    import csv
+    import io
+    
+    # Validate file type
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+    
+    # Validate API keys
+    if not openai_api_key.strip():
+        raise HTTPException(status_code=400, detail="OpenAI API key is required")
+    
+    try:
+        # Read CSV content
+        content = await file.read()
+        csv_content = content.decode('utf-8')
+        
+        # Parse CSV
+        csv_reader = csv.DictReader(io.StringIO(csv_content))
+        companies = []
+        
+        for row_num, row in enumerate(csv_reader, 1):
+            if row_num > 100:  # Limit to 100 companies
+                break
+                
+            company_name = row.get('company_name', '').strip()
+            company_url = row.get('company_url', '').strip()
+            
+            if company_name:
+                companies.append(CompanyRequest(
+                    company_name=company_name,
+                    company_url=company_url if company_url else None,
+                    api_keys=APIKeys(
+                        openai_api_key=openai_api_key,
+                        google_maps_api_key=google_maps_api_key,
+                        tavily_api_key=tavily_api_key
+                    )
+                ))
+        
+        if not companies:
+            raise HTTPException(status_code=400, detail="No valid companies found in CSV")
+        
+        # Create job
+        job_id = str(uuid.uuid4())
+        
+        jobs_storage[job_id] = JobStatus(
+            job_id=job_id,
+            status="pending",
+            progress=0,
+            message=f"CSV uploaded - processing {len(companies)} companies",
+            created_at=datetime.now().isoformat()
+        ).dict()
+        
+        # Start background processing
+        background_tasks.add_task(
+            process_batch_companies,
+            job_id,
+            companies,
+            APIKeys(
+                openai_api_key=openai_api_key,
+                google_maps_api_key=google_maps_api_key,
+                tavily_api_key=tavily_api_key
+            )
+        )
+        
+        logger.info(f"CSV upload job {job_id} created with {len(companies)} companies")
+        
+        return {
+            "job_id": job_id,
+            "status": "queued",
+            "companies_count": len(companies),
+            "message": f"CSV processed successfully - {len(companies)} companies queued"
+        }
+        
+    except Exception as e:
+        logger.error(f"CSV upload error: {e}")
+        raise HTTPException(status_code=400, detail=f"Error processing CSV: {str(e)}")
 
 @app.get("/jobs/{job_id}/status", tags=["Jobs"])
 async def get_job_status(job_id: str):
