@@ -258,6 +258,61 @@ async def list_jobs(limit: int = 10):
         "showing": len(jobs_list)
     }
 
+@app.get("/jobs/{job_id}/download/{file_type}", tags=["Jobs"])
+async def download_job_results(job_id: str, file_type: str):
+    """Download job results in specified format"""
+    from fastapi.responses import StreamingResponse
+    import io
+    import json
+    import csv
+    
+    if job_id not in jobs_storage:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = jobs_storage[job_id]
+    
+    if job["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Job not completed yet")
+    
+    if not job.get("results"):
+        raise HTTPException(status_code=404, detail="Job results not found")
+    
+    results = job["results"]
+    
+    if file_type.lower() == "json":
+        # Generate JSON file
+        json_str = json.dumps(results, indent=2)
+        buffer = io.StringIO(json_str)
+        
+        return StreamingResponse(
+            io.BytesIO(json_str.encode()),
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename=results_{job_id[:8]}.json"}
+        )
+    
+    elif file_type.lower() == "csv":
+        # Generate CSV file
+        output = io.StringIO()
+        
+        if "locations" in results:
+            locations = results["locations"]
+            if locations:
+                fieldnames = locations[0].keys()
+                writer = csv.DictWriter(output, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(locations)
+        
+        csv_content = output.getvalue()
+        
+        return StreamingResponse(
+            io.BytesIO(csv_content.encode()),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=results_{job_id[:8]}.csv"}
+        )
+    
+    else:
+        raise HTTPException(status_code=400, detail="Supported formats: json, csv")
+
 @app.delete("/jobs/{job_id}", tags=["Jobs"])
 async def delete_job(job_id: str):
     """Delete a job and its results"""
