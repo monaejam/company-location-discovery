@@ -193,14 +193,8 @@ export default function JobStatus({ jobId, onComplete }: JobStatusProps) {
       )}
 
       {/* Download Options */}
-      {status.status === 'completed' && status.download_urls && status.download_urls.length > 0 && (
+      {status.status === 'completed' && (
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => handleDownload('excel')}
-            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-          >
-            📊 Download Excel
-          </button>
           <button
             onClick={() => handleDownload('csv')}
             className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"

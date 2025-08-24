@@ -409,6 +409,10 @@ async def process_single_company(
         jobs_storage[job_id]["message"] = f"Discovery completed - found {len(result['locations'])} locations"
         jobs_storage[job_id]["completed_at"] = datetime.now().isoformat()
         jobs_storage[job_id]["results"] = result
+        jobs_storage[job_id]["download_urls"] = [
+            f"/jobs/{job_id}/download/json",
+            f"/jobs/{job_id}/download/csv"
+        ]
         
         logger.info(f"Job {job_id}: Completed successfully with {len(result['locations'])} locations")
         
@@ -497,6 +501,10 @@ async def process_batch_companies(
         jobs_storage[job_id]["message"] = f"Batch completed - {success_count}/{total_companies} companies successful, {total_locations} total locations"
         jobs_storage[job_id]["completed_at"] = datetime.now().isoformat()
         jobs_storage[job_id]["results"] = batch_result
+        jobs_storage[job_id]["download_urls"] = [
+            f"/jobs/{job_id}/download/json",
+            f"/jobs/{job_id}/download/csv"
+        ]
         
         logger.info(f"Batch job {job_id}: Completed successfully")
         
