@@ -23,7 +23,8 @@ export default function JobStatus({ jobId, onComplete }: JobStatusProps) {
 
         if (jobStatus.status === 'completed' || jobStatus.status === 'failed') {
           clearInterval(interval)
-          setTimeout(onComplete, 5000) // Auto-hide after 5 seconds
+          // Don't auto-hide completed jobs - let user manually dismiss them
+          // setTimeout(onComplete, 30000) // Optional: auto-hide after 30 seconds
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch status')
@@ -141,13 +142,27 @@ export default function JobStatus({ jobId, onComplete }: JobStatusProps) {
           </div>
         </div>
         
-        {status.status === 'completed' && (
-          <div className="text-right">
-            <p className="text-sm font-medium text-green-800">
-              {status.results?.locations?.length || 0} locations found
-            </p>
-          </div>
-        )}
+        <div className="flex items-center space-x-4">
+          {status.status === 'completed' && (
+            <div className="text-right">
+              <p className="text-sm font-medium text-green-800">
+                {status.results?.locations?.length || 0} locations found
+              </p>
+            </div>
+          )}
+          
+          {(status.status === 'completed' || status.status === 'failed') && (
+            <button
+              onClick={onComplete}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="Dismiss results"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Progress Bar */}
