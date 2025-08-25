@@ -148,6 +148,8 @@ class EnhancedGoogleMapsAgentNode:
                 AIMessage(content=f"Google Maps found {len(locations)} locations")
             )
             logger.info(f"Google Maps: Found {len(locations)} locations")
+            for loc in locations:
+                logger.debug(f"Google Maps location: {loc.get('name', 'Unknown')} - {loc.get('city', 'No city')}")
             
         except Exception as e:
             logger.error(f"Google Maps error: {e}")
@@ -248,6 +250,8 @@ If NO specific locations found, return: []"""
                 AIMessage(content=f"Tavily found {len(locations)} locations")
             )
             logger.info(f"Tavily: Found {len(locations)} locations")
+            for loc in locations:
+                logger.debug(f"Tavily location: {loc.get('name', 'Unknown')} - {loc.get('city', 'No city')}")
             
         except Exception as e:
             logger.error(f"Tavily error: {e}")
@@ -388,6 +392,8 @@ class ImprovedWebScraperAgentNode:
                 AIMessage(content=f"Web scraper found {len(all_locations)} locations from {company_url}")
             )
             logger.info(f"Web Scraper: Found {len(all_locations)} locations")
+            for loc in all_locations:
+                logger.debug(f"Web scraper location: {loc.get('name', 'Unknown')} - {loc.get('city', 'No city')}")
             
         except Exception as e:
             logger.error(f"Web scraper error for {company_url}: {e}")
@@ -476,18 +482,21 @@ class ImprovedWebScraperAgentNode:
         """Use LLM to extract location information from text"""
         locations = []
         
-        # Don't process if text is too short or doesn't contain location indicators
-        if len(text.strip()) < 50:
+        # Don't process if text is too short
+        if len(text.strip()) < 30:  # Reduced from 50 to 30
             return locations
             
-        # Check if text contains actual location information
+        # Check if text contains actual location information (more flexible)
         location_indicators = [
             'address', 'street', 'avenue', 'road', 'drive', 'boulevard',
             'suite', 'floor', 'building', 'office', 'headquarters', 'location',
-            'city', 'state', 'country', 'zip', 'postal', 'phone', 'tel'
+            'city', 'state', 'country', 'zip', 'postal', 'phone', 'tel',
+            'contact', 'visit', 'based', 'located', 'find us', 'our office'  # Added more flexible indicators
         ]
         
-        if not any(indicator in text.lower() for indicator in location_indicators):
+        # More flexible - process if ANY indicator found OR if text is substantial
+        has_location_indicators = any(indicator in text.lower() for indicator in location_indicators)
+        if not has_location_indicators and len(text.strip()) < 200:  # Only skip if no indicators AND short text
             return locations
         
         prompt = f"""CRITICAL: Only extract REAL, ACTUAL locations that are explicitly mentioned in the text. DO NOT create, invent, or assume any locations.
@@ -626,6 +635,8 @@ class BusinessDirectoryAgentNode:
                 AIMessage(content=f"Business directories found {len(locations)} locations")
             )
             logger.info(f"Directory: Found {len(locations)} locations")
+            for loc in locations:
+                logger.debug(f"Directory location: {loc.get('name', 'Unknown')} - {loc.get('city', 'No city')}")
             
         except Exception as e:
             logger.error(f"Directory error: {e}")
@@ -690,18 +701,19 @@ RULES:
 1. ONLY extract locations that are explicitly stated in the directory data
 2. DO NOT create fake international locations (like KSA-Jeddah, UAE-Dubai)
 3. DO NOT generate locations based on company name alone
-4. If no specific addresses are mentioned, return empty array []
-5. Only include locations with real addresses that appear in the text
+4. Include locations with at least a city name, address preferred but not required
+5. Only include locations that appear in the text
 6. Focus on US/North American locations unless clearly stated otherwise
 
 Look for:
-- Explicitly mentioned business addresses with street names
-- Phone numbers with addresses
+- Business addresses with street names (preferred)
+- City and state combinations
+- Phone numbers with locations
 - Verified business listings
 
 Return ONLY a JSON array with these fields for REAL locations found:
 - name: Business name or location name (must be in text)
-- address: Full street address (must be explicitly mentioned)
+- address: Full street address (if available, empty string if not)
 - city: City name (must be in text)
 - state: State/province (if mentioned)
 - country: Country name (if mentioned, default USA)
@@ -720,7 +732,7 @@ If NO specific addresses are found in the directory data, return: []
                 try:
                     locs = json.loads(json_match.group())
                     for loc in locs:
-                        if loc.get('city') and loc.get('address'):  # Must have both
+                        if loc.get('city'):  # Only require city, address is optional
                             location = {
                                 'name': loc.get('name', f"{company_name} - {loc.get('city', 'Unknown')}"),
                                 'address': loc.get('address', ''),
@@ -809,26 +821,37 @@ class DeduplicationNode:
             'unknown city'
         ]
         
-        for loc in state.get('all_locations', []):
+        all_locations = state.get('all_locations', [])
+        logger.info(f"Deduplication: Processing {len(all_locations)} total locations")
+        
+        for loc in all_locations:
             # Skip obviously fake locations
             city = loc.get('city', '').lower()
             name = loc.get('name', '').lower()
             address = loc.get('address', '').lower()
+            source = loc.get('source', 'unknown')
+            
+            logger.debug(f"Processing location: {name} | {city} | {address} | source: {source}")
             
             is_fake = any(indicator in city or indicator in name or indicator in address 
                          for indicator in fake_indicators)
             
-            # Check for suspicious geographic patterns
+            # Check for suspicious geographic patterns - but be more selective
             full_location = f"{city} {name} {address}".lower()
             is_suspicious = any(pattern in full_location for pattern in suspicious_patterns)
             
             # Skip if it looks fake or suspicious
-            if is_fake or is_suspicious:
-                logger.info(f"Filtered out fake/suspicious location: {loc.get('name', 'Unknown')} - {city}")
+            if is_fake:
+                logger.info(f"Filtered FAKE location: {loc.get('name', 'Unknown')} - {city} (reason: fake indicators)")
+                continue
+                
+            if is_suspicious:
+                logger.info(f"Filtered SUSPICIOUS location: {loc.get('name', 'Unknown')} - {city} (reason: suspicious pattern)")
                 continue
                 
             # Skip if city is empty or just whitespace
             if not city.strip():
+                logger.info(f"Filtered EMPTY city: {loc.get('name', 'Unknown')} (reason: no city)")
                 continue
             
             key = (city, name[:30])
