@@ -11,19 +11,33 @@ export interface CompanyRequest {
 }
 
 export interface Location {
+  location_id?: string
+  name: string
+  address?: string
+  city: string
+  state?: string
+  country?: string
+  postal_code?: string
+  phone?: string
+  website?: string
+  lat?: number | string
+  lng?: number | string
+  confidence?: number
+  source: string
+  source_url?: string
+  search_query?: string
+  search_pattern?: string
+  facility_type?: string
+  // API format compatibility
   Location_ID?: string
   Company_Name?: string
-  Location_Name: string
+  Location_Name?: string
   Street_Address?: string
-  City: string
   State_Province?: string
-  Country?: string
   Postal_Code?: string
-  Phone?: string
-  Website?: string
   Latitude?: number | string
   Longitude?: number | string
-  Data_Source: string
+  Data_Source?: string
   Source_Confidence?: number
   Source_URL?: string
   Discovery_Date?: string
@@ -47,13 +61,25 @@ export interface JobStatus {
         google_maps: number
         tavily: number
         website: number
-        sec: number
+        directory: number
+        sec_filings: number
+        multi_search: number
+        industry_specific: number
       }
       total_locations: number
       url_processed: boolean
+      enhancement_multiplier?: number
+      timestamp?: string
+    }
+    enhancement_summary?: {
+      total_agents_used: number
+      enhancement_features: string[]
+      pages_crawled: string
+      expected_improvement: string
     }
     messages: string[]
     errors: string[]
+    export_files?: string[]
   }
   download_urls?: string[]
 }

@@ -14,8 +14,8 @@ from loguru import logger
 import tempfile
 import os
 
-# Import the real workflow
-from master_discovery_workflow import EnhancedDiscoveryWorkflow
+# Import the enhanced workflow
+from master_discovery_workflow import SuperEnhancedDiscoveryWorkflow
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -449,14 +449,14 @@ async def process_single_company(
         jobs_storage[job_id]["progress"] = 20
         jobs_storage[job_id]["message"] = "Starting multi-agent workflow..."
         
-        # Create workflow instance
-        workflow = EnhancedDiscoveryWorkflow(
-            output_dir="/tmp/output",
+        # Create workflow instance  
+        workflow = SuperEnhancedDiscoveryWorkflow(
+            output_dir="temp/output",
             api_keys=workflow_api_keys
         )
         
         jobs_storage[job_id]["progress"] = 30
-        jobs_storage[job_id]["message"] = "Running Google Maps agent..."
+        jobs_storage[job_id]["message"] = "Running enhanced multi-agent discovery (Google Maps, Tavily, Web Scraper, SEC, Multi-Search, Industry-specific, Directory agents)..."
         
         # Run the real discovery workflow
         result = workflow.discover(
@@ -500,6 +500,7 @@ async def process_single_company(
             "company_url": company_url,
             "locations": locations,
             "summary": result.get('summary', {}),
+            "enhancement_summary": result.get('enhancement_summary', {}),
             "messages": result.get('messages', []),
             "errors": result.get('errors', []),
             "export_files": result.get('export_files', [])
@@ -508,7 +509,7 @@ async def process_single_company(
         # Complete job
         jobs_storage[job_id]["status"] = "completed"
         jobs_storage[job_id]["progress"] = 100
-        jobs_storage[job_id]["message"] = f"Discovery completed - found {len(locations)} locations using real agents"
+        jobs_storage[job_id]["message"] = f"Enhanced discovery completed - found {len(locations)} locations using {result.get('enhancement_summary', {}).get('total_agents_used', 'multiple')} agents"
         jobs_storage[job_id]["completed_at"] = datetime.now().isoformat()
         jobs_storage[job_id]["results"] = final_result
         jobs_storage[job_id]["download_urls"] = [
@@ -546,8 +547,8 @@ async def process_batch_companies(
             'tavily_api_key': api_keys.tavily_api_key
         }
         
-        workflow = EnhancedDiscoveryWorkflow(
-            output_dir="/tmp/output",
+        workflow = SuperEnhancedDiscoveryWorkflow(
+            output_dir="temp/output",
             api_keys=workflow_api_keys
         )
         
@@ -591,6 +592,7 @@ async def process_batch_companies(
                     "company_url": company.company_url,
                     "locations": locations,
                     "summary": result.get('summary', {}),
+                    "enhancement_summary": result.get('enhancement_summary', {}),
                     "messages": result.get('messages', []),
                     "errors": result.get('errors', [])
                 }
@@ -634,7 +636,7 @@ async def process_batch_companies(
         # Complete batch job
         jobs_storage[job_id]["status"] = "completed"
         jobs_storage[job_id]["progress"] = 100
-        jobs_storage[job_id]["message"] = f"Batch completed using real agents - {success_count}/{total_companies} companies successful, {total_locations} total locations"
+        jobs_storage[job_id]["message"] = f"Enhanced batch completed - {success_count}/{total_companies} companies successful, {total_locations} total locations using enhanced multi-agent workflow"
         jobs_storage[job_id]["completed_at"] = datetime.now().isoformat()
         jobs_storage[job_id]["results"] = batch_result
         jobs_storage[job_id]["download_urls"] = [
