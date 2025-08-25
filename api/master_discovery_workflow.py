@@ -31,7 +31,7 @@ class DiscoveryState(TypedDict):
     google_maps_results: List[Dict]
     web_scraper_results: List[Dict]
     tavily_search_results: List[Dict]
-    sec_filing_results: List[Dict]
+    directory_results: List[Dict]
     
     # Processing stages
     all_locations: List[Dict]
@@ -576,8 +576,8 @@ If NO specific locations are found in the text, return: []
             return ""
     
 
-class SECFilingAgentNode:
-    """SEC filing agent for subsidiary and location information"""
+class BusinessDirectoryAgentNode:
+    """Business directory agent for verified business locations"""
     
     def __init__(self):
         try:
@@ -587,120 +587,127 @@ class SECFilingAgentNode:
                 api_key=os.getenv("OPENAI_API_KEY")
             )
         except Exception as e:
-            logger.error(f"Failed to initialize OpenAI client for SEC agent: {e}")
+            logger.error(f"Failed to initialize OpenAI client for Directory agent: {e}")
             self.llm = None
-        logger.info("SEC Filing Agent Node initialized")
+            
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+        logger.info("Business Directory Agent Node initialized")
     
     def run(self, state: DiscoveryState) -> DiscoveryState:
-        """Extract from SEC filings using EDGAR database"""
-        if state.get('sec_filing_results') is not None:
+        """Search business directories for company locations"""
+        if state.get('directory_results') is not None:
             return state
         
         if not self.llm:
-            logger.warning("SEC agent disabled - no OpenAI client")
-            state['sec_filing_results'] = []
+            logger.warning("Directory agent disabled - no OpenAI client")
+            state['directory_results'] = []
             return state
         
-        logger.info(f"SEC: Searching for {state['company_name']}")
+        logger.info(f"Directory: Searching for {state['company_name']}")
         
         try:
             locations = []
             
-            # Search SEC EDGAR database
-            company_data = self._search_edgar(state['company_name'])
+            # Search multiple business directories
+            directory_data = self._search_business_directories(state['company_name'])
             
-            if company_data:
-                # Extract locations using LLM
-                locations = self._extract_locations_from_filings(
-                    company_data, 
+            if directory_data:
+                # Extract locations using LLM with strict validation
+                locations = self._extract_directory_locations(
+                    directory_data, 
                     state['company_name']
                 )
             
-            state['sec_filing_results'] = locations
+            state['directory_results'] = locations
             state['messages'].append(
-                AIMessage(content=f"SEC EDGAR found {len(locations)} locations")
+                AIMessage(content=f"Business directories found {len(locations)} locations")
             )
-            logger.info(f"SEC: Found {len(locations)} locations")
+            logger.info(f"Directory: Found {len(locations)} locations")
             
         except Exception as e:
-            logger.error(f"SEC error: {e}")
-            state['sec_filing_results'] = []
-            state['errors'].append(f"SEC search error: {str(e)}")
+            logger.error(f"Directory error: {e}")
+            state['directory_results'] = []
+            state['errors'].append(f"Directory search error: {str(e)}")
         
         return state
     
-    def _search_edgar(self, company_name: str) -> str:
-        """Search SEC EDGAR database for company information"""
+    def _search_business_directories(self, company_name: str) -> str:
+        """Search business directories for company information"""
         try:
-            # Use SEC EDGAR API (no API key required, but rate limited)
-            headers = {
-                'User-Agent': 'Company Discovery Bot contact@example.com',
-                'Accept-Encoding': 'gzip, deflate',
-                'Host': 'www.sec.gov'
-            }
+            # Search for company on business directory sites
+            search_queries = [
+                f"{company_name} headquarters address",
+                f"{company_name} office locations",
+                f"{company_name} business address"
+            ]
             
-            # Search for company CIK (Central Index Key)
-            search_url = f"https://www.sec.gov/cgi-bin/browse-edgar"
-            params = {
-                'action': 'getcompany',
-                'company': company_name,
-                'output': 'atom',
-                'count': '5'
-            }
+            all_content = []
             
-            response = requests.get(search_url, params=params, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                # Parse the response to get company filings info
-                content = response.text
+            for query in search_queries[:1]:  # Limit to 1 query to avoid rate limits
+                try:
+                    # Use DuckDuckGo search (no API key required)
+                    search_url = f"https://duckduckgo.com/html/"
+                    params = {'q': f"{query} site:yellowpages.com OR site:yelp.com OR site:bbb.org"}
+                    
+                    response = self.session.get(search_url, params=params, timeout=10)
+                    
+                    if response.status_code == 200 and len(response.text) > 100:
+                        # Extract text content
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        text = soup.get_text()[:2000]  # Limit size
+                        all_content.append(text)
+                        
+                except Exception as e:
+                    logger.error(f"Directory search error: {e}")
+                    continue
                 
-                # Look for recent 10-K or 10-Q filings that might contain location info
-                if 'entry' in content and len(content) > 100:
-                    return content[:5000]  # Limit content size
+                time.sleep(1)  # Be polite
             
-            logger.warning(f"SEC search returned status {response.status_code}")
-            return ""
+            return ' '.join(all_content)
             
         except Exception as e:
-            logger.error(f"EDGAR search error: {e}")
+            logger.error(f"Business directory search error: {e}")
             return ""
     
-    def _extract_locations_from_filings(self, filing_data: str, company_name: str) -> List[Dict]:
-        """Extract location information from SEC filing data using LLM"""
+    def _extract_directory_locations(self, directory_data: str, company_name: str) -> List[Dict]:
+        """Extract location information from directory data"""
         locations = []
         
-        if not filing_data or len(filing_data) < 50:
+        if not directory_data or len(directory_data) < 50:
             return locations
         
-        prompt = f"""CRITICAL: Only extract REAL, ACTUAL locations that are explicitly mentioned in this SEC filing data. DO NOT create, invent, or assume any locations.
+        prompt = f"""CRITICAL: Only extract REAL, ACTUAL business locations that are explicitly mentioned in this directory data. DO NOT create, invent, or assume any locations.
 
-Extract business locations for {company_name} ONLY from this SEC filing data:
+Extract business locations for {company_name} ONLY from this directory data:
 
-Filing data:
-{filing_data}
+Directory data:
+{directory_data}
 
 RULES:
-1. ONLY extract locations that are explicitly stated in the filing data
-2. DO NOT create fake Delaware subsidiaries or assumed locations
+1. ONLY extract locations that are explicitly stated in the directory data
+2. DO NOT create fake international locations (like KSA-Jeddah, UAE-Dubai)
 3. DO NOT generate locations based on company name alone
-4. If no specific addresses or locations are mentioned, return empty array []
-5. Only include locations with real city names that appear in the filing text
+4. If no specific addresses are mentioned, return empty array []
+5. Only include locations with real addresses that appear in the text
+6. Focus on US/North American locations unless clearly stated otherwise
 
 Look for:
-- Explicitly mentioned corporate headquarters addresses
-- Specifically named subsidiary locations with addresses
-- Manufacturing facilities with addresses
-- Sales offices with addresses
+- Explicitly mentioned business addresses with street names
+- Phone numbers with addresses
+- Verified business listings
 
 Return ONLY a JSON array with these fields for REAL locations found:
-- name: Location or subsidiary name (must be in text)
-- address: Full address (if available in text)
-- city: City name (must be explicitly mentioned)
+- name: Business name or location name (must be in text)
+- address: Full street address (must be explicitly mentioned)
+- city: City name (must be in text)
 - state: State/province (if mentioned)
-- country: Country name (if mentioned)
-- subsidiary_type: Type (if mentioned)
+- country: Country name (if mentioned, default USA)
+- phone: Phone number (if available)
 
-If NO specific locations are found in the filing data, return: []
+If NO specific addresses are found in the directory data, return: []
 """
         
         try:
@@ -713,25 +720,24 @@ If NO specific locations are found in the filing data, return: []
                 try:
                     locs = json.loads(json_match.group())
                     for loc in locs:
-                        if loc.get('city'):  # Must have at least a city
+                        if loc.get('city') and loc.get('address'):  # Must have both
                             location = {
                                 'name': loc.get('name', f"{company_name} - {loc.get('city', 'Unknown')}"),
                                 'address': loc.get('address', ''),
                                 'city': loc.get('city', ''),
                                 'state': loc.get('state', ''),
-                                'country': loc.get('country', 'USA'),  # Default to USA for SEC filings
+                                'country': loc.get('country', 'USA'),
                                 'postal_code': '',
-                                'phone': '',
-                                'subsidiary_type': loc.get('subsidiary_type', 'subsidiary'),
-                                'source': 'sec_filing',
-                                'confidence': 0.85
+                                'phone': loc.get('phone', ''),
+                                'source': 'business_directory',
+                                'confidence': 0.8
                             }
                             locations.append(location)
                 except json.JSONDecodeError as e:
-                    logger.error(f"SEC JSON parse error: {e}")
+                    logger.error(f"Directory JSON parse error: {e}")
         
         except Exception as e:
-            logger.error(f"SEC LLM extraction error: {e}")
+            logger.error(f"Directory LLM extraction error: {e}")
         
         return locations
 
@@ -750,7 +756,7 @@ class AggregatorNode:
         all_locations = []
         
         for source in ['google_maps_results', 'tavily_search_results', 
-                      'web_scraper_results', 'sec_filing_results']:
+                      'web_scraper_results', 'directory_results']:
             locations = state.get(source, [])
             all_locations.extend(locations)
         
@@ -791,6 +797,18 @@ class DeduplicationNode:
             'mock location'
         ]
         
+        # Geographic validation - suspicious location patterns
+        suspicious_patterns = [
+            'ksa - jeddah',
+            'saudi arabia - jeddah',
+            'uae - dubai',
+            'india - mumbai',
+            'china - beijing',
+            'example city',
+            'sample location',
+            'unknown city'
+        ]
+        
         for loc in state.get('all_locations', []):
             # Skip obviously fake locations
             city = loc.get('city', '').lower()
@@ -800,9 +818,13 @@ class DeduplicationNode:
             is_fake = any(indicator in city or indicator in name or indicator in address 
                          for indicator in fake_indicators)
             
-            # Skip if it looks fake
-            if is_fake:
-                logger.info(f"Filtered out fake location: {loc.get('name', 'Unknown')} - {city}")
+            # Check for suspicious geographic patterns
+            full_location = f"{city} {name} {address}".lower()
+            is_suspicious = any(pattern in full_location for pattern in suspicious_patterns)
+            
+            # Skip if it looks fake or suspicious
+            if is_fake or is_suspicious:
+                logger.info(f"Filtered out fake/suspicious location: {loc.get('name', 'Unknown')} - {city}")
                 continue
                 
             # Skip if city is empty or just whitespace
@@ -1223,7 +1245,7 @@ class SummaryNode:
                 'google_maps': len(state.get('google_maps_results', [])),
                 'tavily': len(state.get('tavily_search_results', [])),
                 'website': len(state.get('web_scraper_results', [])),
-                'sec': len(state.get('sec_filing_results', []))
+                'directory': len(state.get('directory_results', []))
             },
             'url_processed': bool(clean_and_validate_url(state.get('company_url', '')))
         }
@@ -1268,7 +1290,7 @@ class EnhancedSupervisorNode:
         has_google = state.get('google_maps_results') is not None
         has_tavily = state.get('tavily_search_results') is not None
         has_web = state.get('web_scraper_results') is not None
-        has_sec = state.get('sec_filing_results') is not None
+        has_directory = state.get('directory_results') is not None
         has_aggregated = state.get('all_locations') is not None
         has_deduped = state.get('deduplicated_locations') is not None
         has_enriched = state.get('enriched_locations') is not None
@@ -1282,8 +1304,8 @@ class EnhancedSupervisorNode:
             state['next_agent'] = 'tavily_search'
         elif not has_web:
             state['next_agent'] = 'web_scraper'
-        elif not has_sec:
-            state['next_agent'] = 'sec_filing'
+        elif not has_directory:
+            state['next_agent'] = 'directory'
         elif not has_aggregated:
             state['next_agent'] = 'aggregator'
         elif not has_deduped:
@@ -1324,7 +1346,7 @@ class EnhancedDiscoveryWorkflow:
         self.google_maps_node = EnhancedGoogleMapsAgentNode(api_key=api_keys.get('google_maps_api_key') if api_keys else None)
         self.tavily_node = TavilySearchAgentNode(tavily_api_key=api_keys.get('tavily_api_key') if api_keys else None)
         self.web_scraper_node = ImprovedWebScraperAgentNode()
-        self.sec_filing_node = SECFilingAgentNode()
+        self.directory_node = BusinessDirectoryAgentNode()
         self.aggregator_node = AggregatorNode()
         self.deduplication_node = DeduplicationNode()
         self.enrichment_node = LocationEnrichmentNode()
@@ -1345,7 +1367,7 @@ class EnhancedDiscoveryWorkflow:
         workflow.add_node("google_maps", self.google_maps_node.run)
         workflow.add_node("tavily_search", self.tavily_node.run)
         workflow.add_node("web_scraper", self.web_scraper_node.run)
-        workflow.add_node("sec_filing", self.sec_filing_node.run)
+        workflow.add_node("directory", self.directory_node.run)
         workflow.add_node("aggregator", self.aggregator_node.run)
         workflow.add_node("deduplication", self.deduplication_node.run)
         workflow.add_node("enricher", self.enrichment_node.run)
@@ -1367,7 +1389,7 @@ class EnhancedDiscoveryWorkflow:
                 "google_maps": "google_maps",
                 "tavily_search": "tavily_search",
                 "web_scraper": "web_scraper",
-                "sec_filing": "sec_filing",
+                "directory": "directory",
                 "aggregator": "aggregator",
                 "deduplication": "deduplication",
                 "enricher": "enricher",
@@ -1379,7 +1401,7 @@ class EnhancedDiscoveryWorkflow:
         
         # All nodes return to supervisor
         for node in ["google_maps", "tavily_search", "web_scraper", 
-                    "sec_filing", "aggregator", "deduplication",
+                    "directory", "aggregator", "deduplication",
                     "enricher", "exporter", "summary_generator"]:
             workflow.add_edge(node, "supervisor")
         
