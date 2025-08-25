@@ -64,7 +64,7 @@ def clean_and_validate_url(url: str) -> str:
     url = str(url).strip()
     
     # Handle pandas NaN values and common invalid values
-    if url.lower() in ['nan', 'none', 'null', '', 'n/a', 'na']:
+    if (url or '').lower() in ['nan', 'none', 'null', '', 'n/a', 'na']:
         return ""
     
     # Add protocol if missing
@@ -191,7 +191,7 @@ class SuperEnhancedGoogleMapsAgentNode:
         unique = []
         
         for loc in locations:
-            address_key = loc.get('address', '').lower()[:50]  # First 50 chars
+            address_key = (loc.get('address') or '').lower()[:50]  # First 50 chars
             if address_key and address_key not in seen_addresses:
                 seen_addresses.add(address_key)
                 unique.append(loc)
@@ -331,7 +331,7 @@ Return JSON array. If no specific locations found, return []
                 validated_locations = []
                 
                 for loc in locs:
-                    if loc.get('city') and len(loc.get('city', '').strip()) > 1:
+                    if loc and isinstance(loc, dict) and loc.get('city') and len((loc.get('city') or '').strip()) > 1:
                         # Validate that this isn't a fake location
                         if self._validate_location_authenticity(loc, content):
                             loc['source'] = 'tavily'
@@ -348,8 +348,12 @@ Return JSON array. If no specific locations found, return []
     
     def _validate_location_authenticity(self, location: Dict, content: str) -> bool:
         """Validate that the location appears to be real based on content"""
-        city = location.get('city', '').lower()
-        address = location.get('address', '').lower()
+        if not location or not isinstance(location, dict):
+            return False
+            
+        city = (location.get('city') or '').lower()
+        address = (location.get('address') or '').lower()
+        content = content or ''
         
         # Skip if city name doesn't appear in the content
         if city not in content.lower():
@@ -368,7 +372,7 @@ Return JSON array. If no specific locations found, return []
         unique = []
         
         for loc in locations:
-            key = (loc.get('city', '').lower(), loc.get('name', '')[:20].lower())
+            key = ((loc.get('city') or '').lower(), (loc.get('name') or '')[:20].lower())
             if key not in seen and loc.get('city'):
                 seen.add(key)
                 unique.append(loc)
@@ -515,9 +519,9 @@ class SuperEnhancedWebScraperAgentNode:
                 ]
                 
                 for link in soup.find_all('a', href=True):
-                    href = link.get('href', '').lower()
-                    text = link.get_text().lower().strip()
-                    title = link.get('title', '').lower()
+                    href = (link.get('href') or '').lower()
+                    text = (link.get_text() or '').lower().strip()
+                    title = (link.get('title') or '').lower()
                     
                     # Check all attributes
                     all_text = f"{href} {text} {title}"
@@ -591,7 +595,7 @@ class SuperEnhancedWebScraperAgentNode:
     
     def _looks_like_location_page(self, url: str) -> bool:
         """Check if URL looks like a location page"""
-        url_lower = url.lower()
+        url_lower = (url or '').lower()
         location_indicators = [
             'location', 'office', 'contact', 'global', 'facility',
             'branch', 'store', 'career', 'about', 'international'
@@ -644,7 +648,7 @@ class SuperEnhancedWebScraperAgentNode:
     
     def _contains_location_indicators(self, text: str) -> bool:
         """Check if text contains location indicators"""
-        text_lower = text.lower()
+        text_lower = (text or '').lower()
         indicators = [
             'address', 'street', 'avenue', 'road', 'suite', 'floor',
             'phone', 'tel', 'zip', 'postal', 'city', 'state',
@@ -736,7 +740,7 @@ Return [] if no locations found.
         unique = []
         
         for loc in locations:
-            key = (loc.get('city', '').lower(), loc.get('address', '')[:30].lower())
+            key = ((loc.get('city') or '').lower(), (loc.get('address') or '')[:30].lower())
             if key not in seen and loc.get('city'):
                 seen.add(key)
                 unique.append(loc)
@@ -747,10 +751,10 @@ Return [] if no locations found.
         """Try to find company website"""
         try:
             potential_urls = [
-                f"https://www.{company_name.lower().replace(' ', '')}.com",
-                f"https://{company_name.lower().replace(' ', '')}.com",
-                f"https://www.{company_name.lower().replace(' ', '-')}.com",
-                f"https://{company_name.lower().replace(' ', '-')}.com"
+                f"https://www.{(company_name or '').lower().replace(' ', '')}.com",
+                f"https://{(company_name or '').lower().replace(' ', '')}.com",
+                f"https://www.{(company_name or '').lower().replace(' ', '-')}.com",
+                f"https://{(company_name or '').lower().replace(' ', '-')}.com"
             ]
             
             for url in potential_urls:
@@ -831,10 +835,10 @@ class SECFilingsAgentNode:
                 companies = response.json()
                 
                 # Search for company by name
-                company_lower = company_name.lower()
+                company_lower = (company_name or '').lower()
                 for item in companies.values():
                     if isinstance(item, dict):
-                        title = item.get('title', '').lower()
+                        title = (item.get('title') or '').lower()
                         if any(word in title for word in company_lower.split()[:2]):  # Match first 2 words
                             return {
                                 'cik': str(item.get('cik_str')),
@@ -1031,8 +1035,8 @@ Return JSON array. Return [] if no specific locations found.
                 for loc in locs:
                     if loc.get('city') and len(loc.get('city', '').strip()) > 1:
                         # Basic validation
-                        city = loc.get('city', '').lower()
-                        if city in content.lower():  # City must appear in content
+                        city = (loc.get('city') or '').lower()
+                        if city in (content or '').lower():  # City must appear in content
                             loc['source'] = 'multi_search'
                             loc['confidence'] = 0.75
                             loc['search_query'] = query
@@ -1051,7 +1055,7 @@ Return JSON array. Return [] if no specific locations found.
         unique = []
         
         for loc in locations:
-            key = (loc.get('city', '').lower(), loc.get('name', '')[:25].lower())
+            key = ((loc.get('city') or '').lower(), (loc.get('name') or '')[:25].lower())
             if key not in seen and loc.get('city'):
                 seen.add(key)
                 unique.append(loc)
@@ -1116,7 +1120,7 @@ class IndustrySpecificAgentNode:
     
     def _determine_industry(self, company_name: str) -> str:
         """Determine industry from company name"""
-        company_lower = company_name.lower()
+        company_lower = (company_name or '').lower()
         
         industry_keywords = {
             'retail': ['retail', 'store', 'shop', 'market', 'mall', 'walmart', 'target'],
@@ -1412,9 +1416,9 @@ class EnhancedDeduplicationNode:
         ]
         
         for loc in locations:
-            city = loc.get('city', '').lower().strip()
-            name = loc.get('name', '').lower().strip()
-            address = loc.get('address', '').lower().strip()
+            city = (loc.get('city') or '').lower().strip()
+            name = (loc.get('name') or '').lower().strip()
+            address = (loc.get('address') or '').lower().strip()
             
             # Skip if no city
             if not city or len(city) < 2:
@@ -1436,8 +1440,8 @@ class EnhancedDeduplicationNode:
         processed = set()
         
         for loc in locations:
-            city = loc.get('city', '').lower().strip()
-            name = loc.get('name', '').lower().strip()
+            city = (loc.get('city') or '').lower().strip()
+            name = (loc.get('name') or '').lower().strip()
             
             # Create a key for comparison
             key = f"{city}_{name[:20]}"
@@ -1558,7 +1562,7 @@ class LocationEnrichmentNode:
     
     def _get_known_headquarters(self, company_name: str) -> Dict:
         """Get known corporate headquarters for major companies"""
-        company_lower = company_name.lower()
+        company_lower = (company_name or '').lower()
         
         known_companies = {
             "microsoft": {
@@ -1616,7 +1620,7 @@ class EnhancedExportNode:
             return state
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        company_slug = state['company_name'].lower().replace(' ', '_').replace('-', '_')[:30]
+        company_slug = (state['company_name'] or '').lower().replace(' ', '_').replace('-', '_')[:30]
         
         locations = state.get('final_locations', [])
         
@@ -1705,7 +1709,7 @@ class EnhancedExportNode:
             'known_headquarters': 'Known HQ Data',
             'unknown': 'Unknown'
         }
-        return source_map.get(source.lower(), source.title())
+        return source_map.get((source or '').lower(), (source or '').title())
     
     def _create_clean_csv(self, df, company_slug, timestamp):
         """Create clean CSV file"""

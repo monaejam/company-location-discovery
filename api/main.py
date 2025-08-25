@@ -31,6 +31,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://diligent-patience-production-f846.up.railway.app",
+        "https://company-location-discovery-production.up.railway.app",
         "http://localhost:3000",  # For local development
         "*"  # Allow all origins for now
     ],
@@ -524,7 +525,7 @@ async def process_single_company(
         logger.info(f"Job {job_id}: Completed successfully with {len(locations)} locations using real workflow")
         
     except Exception as e:
-        logger.error(f"Job {job_id}: Error - {e}")
+        logger.error(f"Job {job_id}: Error - {e}", exc_info=True)
         jobs_storage[job_id]["status"] = "failed"
         jobs_storage[job_id]["message"] = f"Error during processing: {str(e)}"
         jobs_storage[job_id]["completed_at"] = datetime.now().isoformat()
@@ -651,10 +652,11 @@ async def process_batch_companies(
         logger.info(f"Batch job {job_id}: Completed successfully using real workflow")
         
     except Exception as e:
-        logger.error(f"Batch job {job_id}: Error - {e}")
+        logger.error(f"Batch job {job_id}: Error - {e}", exc_info=True)
         jobs_storage[job_id]["status"] = "failed"
         jobs_storage[job_id]["message"] = f"Batch processing error: {str(e)}"
         jobs_storage[job_id]["completed_at"] = datetime.now().isoformat()
+        jobs_storage[job_id]["errors"] = [str(e)]
 
 # Error handlers
 @app.exception_handler(ValueError)
@@ -666,11 +668,19 @@ async def general_exception_handler(request, exc):
     logger.error(f"Unhandled exception: {exc}")
     return HTTPException(status_code=500, detail="Internal server error")
 
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    logger.info("🚀 Company Location Discovery API starting up...")
+    logger.info(f"🌍 CORS origins configured: {app.middleware}")
+    logger.info("✅ API ready to accept requests")
+
 # For local development
 if __name__ == "__main__":
     import uvicorn
     import os
     port = int(os.environ.get("PORT", 8000))
+    logger.info(f"🚀 Starting server on port {port}")
     uvicorn.run(
         app, 
         host="0.0.0.0", 
