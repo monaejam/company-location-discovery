@@ -7,7 +7,7 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies (including dev dependencies for build)
+# Install all dependencies
 RUN npm ci
 
 # Copy application code
@@ -16,8 +16,8 @@ COPY . .
 # Build the Next.js application
 RUN npm run build
 
-# Remove dev dependencies after build
-RUN npm prune --production
+# Don't prune - keep all dependencies to avoid runtime issues
+# RUN npm prune --production
 
 # Expose port
 EXPOSE 3000
