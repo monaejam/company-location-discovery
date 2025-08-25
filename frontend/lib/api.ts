@@ -1,7 +1,16 @@
 import { CompanyRequest, JobStatus } from './types'
 
-// Get API URL from environment or use Railway backend URL
+// Get API URL from environment or force Railway backend URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://company-location-discovery-production.up.railway.app'
+
+// Force the correct URL if still seeing localhost issues
+const FORCED_API_URL = 'https://company-location-discovery-production.up.railway.app'
+const FINAL_API_URL = API_BASE_URL.includes('localhost') ? FORCED_API_URL : API_BASE_URL
+
+// Debug logging
+console.log('🔍 API Debug Info:')
+console.log('NEXT_PUBLIC_API_URL env var:', process.env.NEXT_PUBLIC_API_URL)
+console.log('Final API_BASE_URL:', API_BASE_URL)
 
 
 class APIError extends Error {
@@ -12,7 +21,7 @@ class APIError extends Error {
 }
 
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
-  const url = `${API_BASE_URL}${endpoint}`
+  const url = `${FINAL_API_URL}${endpoint}`
   
   try {
     const response = await fetch(url, {
@@ -70,7 +79,7 @@ export async function uploadCSV(file: File, apiKeys: {
     formData.append('tavily_api_key', apiKeys.tavily_api_key)
   }
 
-  const response = await fetch(`${API_BASE_URL}/discover/upload`, {
+  const response = await fetch(`${FINAL_API_URL}/discover/upload`, {
     method: 'POST',
     body: formData,
   })
@@ -95,7 +104,7 @@ export async function getJobResults(jobId: string) {
 }
 
 export async function downloadResults(jobId: string, fileType: string) {
-  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/download/${fileType}`)
+  const response = await fetch(`${FINAL_API_URL}/jobs/${jobId}/download/${fileType}`)
   
   if (!response.ok) {
     throw new APIError(`Failed to download ${fileType} file`, response.status)
