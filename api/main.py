@@ -22,6 +22,42 @@ except ImportError:
     CACHE_AVAILABLE = False
     dc = None
 
+# Simple fallback workflow class
+class SimpleDiscoveryWorkflow:
+    """Simple fallback workflow when main workflow fails to load"""
+    def __init__(self, output_dir: str = "temp/output", api_keys: dict = None):
+        self.api_keys = api_keys or {}
+        logger.info("Using simple fallback workflow")
+    
+    def discover(self, company_name: str, company_url: str = None):
+        """Simple discovery that returns a basic result"""
+        logger.info(f"Simple discovery for {company_name}")
+        return {
+            'company': company_name,
+            'url': company_url or '',
+            'locations': [
+                {
+                    'name': f"{company_name} - Location Discovery Service Unavailable",
+                    'city': 'Service Temporarily Unavailable',
+                    'address': 'Please try again later',
+                    'source': 'fallback',
+                    'confidence': 0.1
+                }
+            ],
+            'summary': {
+                'total_locations': 1,
+                'status': 'fallback_mode',
+                'message': 'Advanced workflow unavailable, using simple fallback'
+            },
+            'enhancement_summary': {
+                'status': 'unavailable',
+                'reason': 'Dependency issues with advanced workflow'
+            },
+            'export_files': [],
+            'messages': ['Advanced discovery workflow is temporarily unavailable'],
+            'errors': ['Using fallback discovery mode']
+        }
+
 # Import the enhanced workflow with error handling
 try:
     from master_discovery_workflow import SuperEnhancedDiscoveryWorkflow
@@ -29,8 +65,9 @@ try:
     logger.info("Successfully imported SuperEnhancedDiscoveryWorkflow")
 except Exception as e:
     logger.error(f"Failed to import workflow: {e}")
+    logger.error(f"Error details: {type(e).__name__}: {str(e)}")
     WORKFLOW_AVAILABLE = False
-    SuperEnhancedDiscoveryWorkflow = None
+    SuperEnhancedDiscoveryWorkflow = SimpleDiscoveryWorkflow
 
 # Initialize disk cache for persistent caching (create directory if needed)
 import pathlib
@@ -59,11 +96,9 @@ def get_cached_workflow(api_keys_hash: str, output_dir: str = "temp/output"):
 
 def create_workflow_with_cache(api_keys: dict, output_dir: str = "temp/output"):
     """Create workflow with intelligent caching"""
+    # Always create a workflow - either advanced or fallback
     if not WORKFLOW_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Workflow system is not available. Please check server logs."
-        )
+        logger.warning("Using fallback workflow due to import issues")
     
     # Create a cache key based on provided API keys (not their values for security)
     key_types = tuple(sorted([k for k, v in api_keys.items() if v]))
@@ -111,7 +146,6 @@ app.add_middleware(
     allow_origins=[
         "https://diligent-patience-production-f846.up.railway.app",
         "https://company-location-discovery-production.up.railway.app",
-        "https://company-location-discovery-frontend-production.up.railway.app",
         "http://localhost:3000",  # For local development
         "*"  # Allow all origins for now
     ],
