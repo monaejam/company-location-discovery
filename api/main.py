@@ -29,7 +29,11 @@ app = FastAPI(
 # CORS middleware for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend domain
+    allow_origins=[
+        "https://diligent-patience-production-f846.up.railway.app",
+        "http://localhost:3000",  # For local development
+        "*"  # Allow all origins for now
+    ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
