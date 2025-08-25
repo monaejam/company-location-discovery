@@ -11,11 +11,11 @@ requests==2.31.0
 beautifulsoup4==4.12.2
 lxml==4.9.3
 
-# LangChain and AI Dependencies (pinned for memory efficiency)
-langchain==0.1.0
-langchain-openai==0.0.8
-langchain-community==0.0.20
-langgraph==0.0.35
+# LangChain and AI Dependencies (compatible versions)
+langchain>=0.1.0,<0.3.0
+langchain-openai>=0.0.8,<2.0.0
+langchain-community>=0.0.20,<0.3.0
+langgraph>=0.0.35,<2.0.0
 
 # External APIs
 googlemaps==4.10.0
@@ -29,5 +29,4 @@ python-dateutil==2.8.2
 urllib3>=2.0.0
 
 # Caching for memory optimization
-functools32; python_version < '3.2'
 diskcache==5.6.3
