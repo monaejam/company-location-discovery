@@ -118,14 +118,14 @@ async def discover_single_company(
     """
     
     # Validate required API keys
-    if not request.api_keys.openai_api_key.strip():
+    if not request.api_keys.openai_api_key or not request.api_keys.openai_api_key.strip():
         raise HTTPException(
             status_code=400, 
             detail="OpenAI API key is required. Please provide your API key."
         )
     
     # Validate company name
-    if not request.company_name.strip():
+    if not request.company_name or not request.company_name.strip():
         raise HTTPException(
             status_code=400,
             detail="Company name is required"
@@ -182,7 +182,7 @@ async def discover_batch_companies(
         )
     
     # Validate API keys
-    if not request.api_keys.openai_api_key.strip():
+    if not request.api_keys.openai_api_key or not request.api_keys.openai_api_key.strip():
         raise HTTPException(
             status_code=400, 
             detail="OpenAI API key is required for batch processing"
@@ -237,7 +237,7 @@ async def upload_csv_companies(
         raise HTTPException(status_code=400, detail="File must be a CSV")
     
     # Validate API keys
-    if not openai_api_key.strip():
+    if not openai_api_key or not openai_api_key.strip():
         raise HTTPException(status_code=400, detail="OpenAI API key is required")
     
     try:
