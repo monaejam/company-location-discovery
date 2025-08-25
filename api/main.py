@@ -111,6 +111,7 @@ app.add_middleware(
     allow_origins=[
         "https://diligent-patience-production-f846.up.railway.app",
         "https://company-location-discovery-production.up.railway.app",
+        "https://company-location-discovery-frontend-production.up.railway.app",
         "http://localhost:3000",  # For local development
         "*"  # Allow all origins for now
     ],

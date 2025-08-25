@@ -1,6 +1,7 @@
 import { CompanyRequest, JobStatus } from './types'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://diligent-patience-production-f846.up.railway.app'
+// Get API URL from environment or use Railway backend URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://company-location-discovery-production.up.railway.app'
 
 
 class APIError extends Error {
