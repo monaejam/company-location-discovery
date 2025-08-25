@@ -1350,7 +1350,7 @@ class EnhancedDiscoveryWorkflow:
         workflow.add_node("deduplication", self.deduplication_node.run)
         workflow.add_node("enricher", self.enrichment_node.run)
         workflow.add_node("exporter", self.export_node.run)
-        workflow.add_node("summary", self.summary_node.run)
+        workflow.add_node("summary_generator", self.summary_node.run)
         
         # Set entry point
         workflow.set_entry_point("supervisor")
@@ -1372,7 +1372,7 @@ class EnhancedDiscoveryWorkflow:
                 "deduplication": "deduplication",
                 "enricher": "enricher",
                 "exporter": "exporter",
-                "summary": "summary",
+                "summary": "summary_generator",
                 "end": END
             }
         )
@@ -1380,7 +1380,7 @@ class EnhancedDiscoveryWorkflow:
         # All nodes return to supervisor
         for node in ["google_maps", "tavily_search", "web_scraper", 
                     "sec_filing", "aggregator", "deduplication",
-                    "enricher", "exporter", "summary"]:
+                    "enricher", "exporter", "summary_generator"]:
             workflow.add_edge(node, "supervisor")
         
         return workflow.compile()
