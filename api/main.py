@@ -475,6 +475,16 @@ async def process_single_company(
         logger.info(f"Job {job_id}: Messages: {result.get('messages', [])}")
         logger.info(f"Job {job_id}: Errors: {result.get('errors', [])}")
         
+        # Additional debugging for location discovery
+        enhancement_summary = result.get('enhancement_summary', {})
+        logger.info(f"Job {job_id}: Enhancement summary: {enhancement_summary}")
+        
+        # Log individual agent results for debugging
+        for agent_name in ['google_maps_results', 'tavily_results', 'web_scraper_results', 'sec_results', 'multi_search_results', 'industry_specific_results', 'business_directory_results']:
+            agent_results = result.get(agent_name, [])
+            if agent_results:
+                logger.info(f"Job {job_id}: {agent_name}: {len(agent_results)} results")
+        
         jobs_storage[job_id]["progress"] = 90
         jobs_storage[job_id]["message"] = "Processing results..."
         

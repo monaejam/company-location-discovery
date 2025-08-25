@@ -182,7 +182,7 @@ class SuperEnhancedGoogleMapsAgentNode:
     def _extract_city(self, address: str) -> str:
         parts = address.split(',')
         if len(parts) >= 3:
-            return parts[-3].strip()
+            return (parts[-3] or '').strip()
         return ''
     
     def _deduplicate_gmaps_results(self, locations: List[Dict]) -> List[Dict]:
@@ -558,7 +558,7 @@ class SuperEnhancedWebScraperAgentNode:
                         soup = BeautifulSoup(response.content, 'xml')
                         
                         for loc in soup.find_all('loc'):
-                            url = loc.get_text().strip()
+                            url = (loc.get_text() or '').strip()
                             if url and self._looks_like_location_page(url):
                                 location_urls.append(url)
                         
@@ -702,7 +702,7 @@ Return [] if no locations found.
                 validated_locations = []
                 
                 for loc in locs:
-                    if loc.get('city') and len(loc.get('city', '').strip()) > 1:
+                    if loc.get('city') and len((loc.get('city') or '').strip()) > 1:
                         loc['source'] = 'company_website'
                         loc['source_url'] = source_url
                         loc['confidence'] = 0.85
@@ -1033,7 +1033,7 @@ Return JSON array. Return [] if no specific locations found.
                 
                 validated_locations = []
                 for loc in locs:
-                    if loc.get('city') and len(loc.get('city', '').strip()) > 1:
+                    if loc.get('city') and len((loc.get('city') or '').strip()) > 1:
                         # Basic validation
                         city = (loc.get('city') or '').lower()
                         if city in (content or '').lower():  # City must appear in content
@@ -1323,7 +1323,7 @@ Return JSON array. Return [] if no locations found.
                 
                 validated_locations = []
                 for loc in locs:
-                    if loc.get('city') and len(loc.get('city', '').strip()) > 1:
+                    if loc.get('city') and len((loc.get('city') or '').strip()) > 1:
                         loc['source'] = 'business_directory'
                         loc['confidence'] = 0.8
                         validated_locations.append(loc)
@@ -1408,6 +1408,7 @@ class EnhancedDeduplicationNode:
     def _filter_fake_locations(self, locations: List[Dict]) -> List[Dict]:
         """Filter out obviously fake or invalid locations"""
         filtered = []
+        filtered_out = 0
         
         fake_indicators = [
             'location search attempted', 'no results', 'various sources checked',
@@ -1432,6 +1433,7 @@ class EnhancedDeduplicationNode:
             
             filtered.append(loc)
         
+        logger.info(f"Fake location filtering: {len(locations)} -> {len(filtered)} locations ({len(locations) - len(filtered)} filtered out)")
         return filtered
     
     def _deduplicate_locations(self, locations: List[Dict]) -> List[Dict]:
@@ -1485,15 +1487,15 @@ class EnhancedDeduplicationNode:
         
         for loc in locations:
             enhanced_loc = {
-                'name': loc.get('name', '').strip(),
-                'address': loc.get('address', '').strip(),
-                'city': loc.get('city', '').strip(),
-                'state': loc.get('state', '').strip(),
-                'country': loc.get('country', '').strip(),
-                'postal_code': loc.get('postal_code', '').strip(),
-                'phone': loc.get('phone', '').strip(),
-                'website': loc.get('website', '').strip(),
-                'facility_type': loc.get('facility_type', '').strip(),
+                'name': (loc.get('name') or '').strip(),
+                'address': (loc.get('address') or '').strip(),
+                'city': (loc.get('city') or '').strip(),
+                'state': (loc.get('state') or '').strip(),
+                'country': (loc.get('country') or '').strip(),
+                'postal_code': (loc.get('postal_code') or '').strip(),
+                'phone': (loc.get('phone') or '').strip(),
+                'website': (loc.get('website') or '').strip(),
+                'facility_type': (loc.get('facility_type') or '').strip(),
                 'lat': loc.get('lat', ''),
                 'lng': loc.get('lng', ''),
                 'confidence': loc.get('confidence', 0.5),
