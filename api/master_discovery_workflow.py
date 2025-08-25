@@ -103,8 +103,11 @@ class EnhancedGoogleMapsAgentNode:
             return state
         
         if not self.client:
-            logger.warning("Google Maps client not available")
+            logger.warning("Google Maps client not available - no API key provided")
             state['google_maps_results'] = []
+            state['messages'].append(
+                AIMessage(content="Google Maps search skipped - no API key provided")
+            )
             return state
         
         logger.info(f"Google Maps: Searching for {state['company_name']}")
@@ -192,8 +195,11 @@ class TavilySearchAgentNode:
             return state
         
         if not self.search or not self.llm:
-            logger.warning("Tavily search not available")
+            logger.warning("Tavily search not available - missing API keys")
             state['tavily_search_results'] = []
+            state['messages'].append(
+                AIMessage(content="Tavily search skipped - missing API keys")
+            )
             return state
         
         logger.info(f"Tavily: Searching for {state['company_name']}")
@@ -760,39 +766,64 @@ class DeduplicationNode:
 
 
 class LocationEnrichmentNode:
-    """Enrich locations with complete details"""
+    """Enrich locations with complete details and add fallback data if needed"""
     
     def __init__(self):
         logger.info("Location Enrichment Node initialized")
     
     def run(self, state: DiscoveryState) -> DiscoveryState:
-        """Add missing fields to locations"""
+        """Add missing fields to locations and create fallback if no data found"""
         if state.get('enriched_locations') is not None:
             return state
         
         locations = state.get('deduplicated_locations', [])
         enriched = []
         
-        for loc in locations:
-            enriched_loc = {
-                'name': loc.get('name', f"{state['company_name']} - {loc.get('city', 'Unknown')}"),
-                'address': loc.get('address', ''),
-                'city': loc.get('city', ''),
-                'country': loc.get('country', ''),
-                'phone': loc.get('phone', ''),
-                'website': loc.get('website', ''),
-                'lat': loc.get('lat', 0),
-                'lng': loc.get('lng', 0),
-                'confidence': loc.get('confidence', 0.5),
-                'source': loc.get('source', 'unknown')
+        # If no locations found from any agent, create a basic fallback
+        if not locations:
+            logger.info(f"No locations found by any agent for {state['company_name']}, creating fallback entry")
+            
+            # Create a basic entry indicating the search was attempted
+            fallback_location = {
+                'name': f"{state['company_name']} (Location search attempted)",
+                'address': 'No specific address found',
+                'city': 'Location search performed but no results',
+                'country': 'Various sources checked',
+                'phone': '',
+                'website': state.get('company_url', ''),
+                'lat': 0,
+                'lng': 0,
+                'confidence': 0.1,
+                'source': 'fallback_search_attempted'
             }
-            enriched.append(enriched_loc)
+            enriched.append(fallback_location)
+            
+            state['messages'].append(
+                AIMessage(content=f"No locations found by agents - created search summary entry")
+            )
+        else:
+            # Normal enrichment process
+            for loc in locations:
+                enriched_loc = {
+                    'name': loc.get('name', f"{state['company_name']} - {loc.get('city', 'Unknown')}"),
+                    'address': loc.get('address', ''),
+                    'city': loc.get('city', ''),
+                    'country': loc.get('country', ''),
+                    'phone': loc.get('phone', ''),
+                    'website': loc.get('website', ''),
+                    'lat': loc.get('lat', 0),
+                    'lng': loc.get('lng', 0),
+                    'confidence': loc.get('confidence', 0.5),
+                    'source': loc.get('source', 'unknown')
+                }
+                enriched.append(enriched_loc)
+            
+            state['messages'].append(
+                AIMessage(content=f"Enriched {len(enriched)} locations")
+            )
         
         state['enriched_locations'] = enriched
         state['final_locations'] = enriched
-        state['messages'].append(
-            AIMessage(content=f"Enriched {len(enriched)} locations")
-        )
         
         return state
 
