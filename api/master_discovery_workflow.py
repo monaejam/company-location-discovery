@@ -561,7 +561,7 @@ If NO specific locations are found in the text, return: []
                                 'country': loc.get('country', ''),
                                 'postal_code': loc.get('postal_code', ''),
                                 'phone': loc.get('phone', ''),
-                                'source': 'website',
+                                'source': 'company_website',
                                 'confidence': 0.8
                             }
                             locations.append(location)
@@ -1124,7 +1124,9 @@ class EnhancedExportNode:
         source_map = {
             'google_maps': 'Google Maps',
             'tavily': 'Tavily Search',
-            'website': 'Company Website',
+            'company_website': 'Company Website',
+            'business_directory': 'Business Directory',
+            'known_headquarters': 'Known HQ Data',
             'sec_filing': 'SEC Filings',
             'unknown': 'Unknown'
         }
