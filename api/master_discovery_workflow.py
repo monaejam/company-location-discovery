@@ -213,11 +213,20 @@ class TavilySearchAgentNode:
             for result in results[:3]:  # Process first 3 results
                 content = result.get('content', '')[:2000]
                 
-                prompt = f"""Extract locations for {state['company_name']} from:
-                {content}
-                
-                Return JSON array with: name, city, country, address.
-                Only JSON array, no text."""
+                prompt = f"""CRITICAL: Only extract REAL, ACTUAL locations that are explicitly mentioned in this text. DO NOT create, invent, or assume any locations.
+
+Extract locations for {state['company_name']} ONLY from this text:
+{content}
+
+RULES:
+1. ONLY extract locations that are explicitly stated in the text
+2. DO NOT create fake or assumed locations  
+3. DO NOT generate locations based on company name alone
+4. If no specific addresses or locations are found, return empty array []
+5. Only include locations with city names that appear in the text
+
+Return ONLY a JSON array with: name, city, country, address for REAL locations found.
+If NO specific locations found, return: []"""
                 
                 response = self.llm.invoke([HumanMessage(content=prompt)])
                 
@@ -467,32 +476,45 @@ class ImprovedWebScraperAgentNode:
         """Use LLM to extract location information from text"""
         locations = []
         
-        prompt = f"""Extract ALL office locations, addresses, and facilities for {company_name} from this website text.
+        # Don't process if text is too short or doesn't contain location indicators
+        if len(text.strip()) < 50:
+            return locations
+            
+        # Check if text contains actual location information
+        location_indicators = [
+            'address', 'street', 'avenue', 'road', 'drive', 'boulevard',
+            'suite', 'floor', 'building', 'office', 'headquarters', 'location',
+            'city', 'state', 'country', 'zip', 'postal', 'phone', 'tel'
+        ]
         
-        Look for:
-        - Office addresses (street, city, state/province, country, postal code)
-        - Headquarters locations
-        - Branch offices
-        - Store locations
-        - Any physical addresses mentioned
+        if not any(indicator in text.lower() for indicator in location_indicators):
+            return locations
         
-        Text:
-        {text}
-        
-        Return a JSON array of locations with these fields:
-        - name: Location name or office name
-        - address: Full street address if available
-        - city: City name
-        - state: State or province (if mentioned)
-        - country: Country name
-        - postal_code: Postal/ZIP code if available
-        - phone: Phone number if available
-        
-        Include ALL locations you find. If you find addresses like "20807 Biscayne Blvd, Suite 203, Miami, FL 33180", 
-        extract all parts properly.
-        
-        Return ONLY the JSON array, no other text. If no locations found, return empty array [].
-        """
+        prompt = f"""CRITICAL: Only extract REAL, ACTUAL locations that are explicitly mentioned in the text. DO NOT create, invent, or assume any locations.
+
+Extract office locations, addresses, and facilities for {company_name} ONLY from this website text:
+
+Text:
+{text}
+
+RULES:
+1. ONLY extract locations that are explicitly stated in the text
+2. DO NOT create fake or assumed locations
+3. DO NOT generate locations based on company name alone
+4. If no specific addresses or locations are found, return empty array []
+5. Only include locations with at least a city name that appears in the text
+
+Return ONLY a JSON array with these fields for REAL locations found:
+- name: Location name (if mentioned)
+- address: Full street address (if available)
+- city: City name (must be in text)
+- state: State/province (if mentioned)
+- country: Country name (if mentioned)
+- postal_code: ZIP/postal code (if available)
+- phone: Phone number (if available)
+
+If NO specific locations are found in the text, return: []
+"""
         
         try:
             response = self.llm.invoke([HumanMessage(content=prompt)])
@@ -650,28 +672,35 @@ class SECFilingAgentNode:
         if not filing_data or len(filing_data) < 50:
             return locations
         
-        prompt = f"""Extract business locations, subsidiaries, and office addresses for {company_name} from this SEC filing data.
+        prompt = f"""CRITICAL: Only extract REAL, ACTUAL locations that are explicitly mentioned in this SEC filing data. DO NOT create, invent, or assume any locations.
 
-Look for:
-- Corporate headquarters addresses
-- Subsidiary company locations
-- Manufacturing facilities
-- Sales offices
-- Distribution centers
-- Any physical business addresses mentioned
+Extract business locations for {company_name} ONLY from this SEC filing data:
 
 Filing data:
 {filing_data}
 
-Return a JSON array of locations with these fields:
-- name: Location or subsidiary name
-- address: Full address if available
-- city: City name
-- state: State/province if available
-- country: Country name
-- subsidiary_type: Type (e.g., "headquarters", "subsidiary", "facility")
+RULES:
+1. ONLY extract locations that are explicitly stated in the filing data
+2. DO NOT create fake Delaware subsidiaries or assumed locations
+3. DO NOT generate locations based on company name alone
+4. If no specific addresses or locations are mentioned, return empty array []
+5. Only include locations with real city names that appear in the filing text
 
-Return ONLY the JSON array, no other text. If no locations found, return empty array [].
+Look for:
+- Explicitly mentioned corporate headquarters addresses
+- Specifically named subsidiary locations with addresses
+- Manufacturing facilities with addresses
+- Sales offices with addresses
+
+Return ONLY a JSON array with these fields for REAL locations found:
+- name: Location or subsidiary name (must be in text)
+- address: Full address (if available in text)
+- city: City name (must be explicitly mentioned)
+- state: State/province (if mentioned)
+- country: Country name (if mentioned)
+- subsidiary_type: Type (if mentioned)
+
+If NO specific locations are found in the filing data, return: []
 """
         
         try:
@@ -741,25 +770,53 @@ class DeduplicationNode:
         logger.info("Deduplication Node initialized")
     
     def run(self, state: DiscoveryState) -> DiscoveryState:
-        """Deduplicate locations"""
+        """Deduplicate locations and filter out fake data"""
         if state.get('deduplicated_locations') is not None:
             return state
         
         seen = set()
         unique = []
         
+        # Fake location indicators to filter out
+        fake_indicators = [
+            'location search attempted',
+            'no results',
+            'various sources checked',
+            'search performed',
+            'unknown location',
+            'test location',
+            'example location',
+            'sample location',
+            'dummy location',
+            'mock location'
+        ]
+        
         for loc in state.get('all_locations', []):
-            key = (
-                loc.get('city', '').lower(),
-                loc.get('name', '').lower()[:30]
-            )
-            if key not in seen and key[0]:
+            # Skip obviously fake locations
+            city = loc.get('city', '').lower()
+            name = loc.get('name', '').lower()
+            address = loc.get('address', '').lower()
+            
+            is_fake = any(indicator in city or indicator in name or indicator in address 
+                         for indicator in fake_indicators)
+            
+            # Skip if it looks fake
+            if is_fake:
+                logger.info(f"Filtered out fake location: {loc.get('name', 'Unknown')} - {city}")
+                continue
+                
+            # Skip if city is empty or just whitespace
+            if not city.strip():
+                continue
+            
+            key = (city, name[:30])
+            if key not in seen:
                 seen.add(key)
                 unique.append(loc)
         
         state['deduplicated_locations'] = unique
         state['messages'].append(
-            AIMessage(content=f"Deduplicated to {len(unique)} unique locations")
+            AIMessage(content=f"Deduplicated to {len(unique)} unique locations (filtered fake data)")
         )
         
         return state
@@ -779,27 +836,12 @@ class LocationEnrichmentNode:
         locations = state.get('deduplicated_locations', [])
         enriched = []
         
-        # If no locations found from any agent, create a basic fallback
+        # If no locations found from any agent, don't create fake data
         if not locations:
-            logger.info(f"No locations found by any agent for {state['company_name']}, creating fallback entry")
-            
-            # Create a basic entry indicating the search was attempted
-            fallback_location = {
-                'name': f"{state['company_name']} (Location search attempted)",
-                'address': 'No specific address found',
-                'city': 'Location search performed but no results',
-                'country': 'Various sources checked',
-                'phone': '',
-                'website': state.get('company_url', ''),
-                'lat': 0,
-                'lng': 0,
-                'confidence': 0.1,
-                'source': 'fallback_search_attempted'
-            }
-            enriched.append(fallback_location)
+            logger.info(f"No locations found by any agent for {state['company_name']}")
             
             state['messages'].append(
-                AIMessage(content=f"No locations found by agents - created search summary entry")
+                AIMessage(content=f"No locations found by any agents for {state['company_name']}")
             )
         else:
             # Normal enrichment process
@@ -831,7 +873,7 @@ class LocationEnrichmentNode:
 class EnhancedExportNode:
     """Enhanced export with better Excel formatting and source tracking"""
     
-    def __init__(self, output_dir: str = "temp/output"):
+    def __init__(self, output_dir: str = "/tmp/output"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         logger.info("Enhanced Export Node initialized")

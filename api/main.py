@@ -451,7 +451,7 @@ async def process_single_company(
         
         # Create workflow instance
         workflow = EnhancedDiscoveryWorkflow(
-            output_dir="temp/output",
+            output_dir="/tmp/output",
             api_keys=workflow_api_keys
         )
         
@@ -547,7 +547,7 @@ async def process_batch_companies(
         }
         
         workflow = EnhancedDiscoveryWorkflow(
-            output_dir="temp/output",
+            output_dir="/tmp/output",
             api_keys=workflow_api_keys
         )
         

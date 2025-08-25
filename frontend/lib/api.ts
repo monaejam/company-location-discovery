@@ -1,6 +1,6 @@
 import { CompanyRequest, JobStatus } from './types'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://company-location-discovery-production.up.railway.app'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 
 class APIError extends Error {
