@@ -169,14 +169,21 @@ class TavilySearchAgentNode:
     
     def __init__(self, tavily_api_key: str = None):
         self.api_key = tavily_api_key or os.getenv("TAVILY_API_KEY")
+        logger.info(f"Tavily API key provided: {'Yes' if self.api_key else 'No'}")
+        
         if self.api_key:
             try:
                 from langchain_community.tools.tavily_search import TavilySearchResults
                 self.search = TavilySearchResults(api_key=self.api_key, max_results=5)
-            except ImportError:
-                logger.warning("Install langchain-community for Tavily support")
+                logger.info("Tavily search client initialized successfully")
+            except ImportError as e:
+                logger.error(f"langchain-community not installed for Tavily support: {e}")
+                self.search = None
+            except Exception as e:
+                logger.error(f"Failed to initialize Tavily search client: {e}")
                 self.search = None
         else:
+            logger.warning("No Tavily API key provided - Tavily agent will be disabled")
             self.search = None
         
         try:
@@ -196,11 +203,19 @@ class TavilySearchAgentNode:
         if state.get('tavily_search_results') is not None:
             return state
         
-        if not self.search or not self.llm:
-            logger.warning("Tavily search not available - missing API keys")
+        if not self.search:
+            logger.warning("Tavily search client not available")
             state['tavily_search_results'] = []
             state['messages'].append(
-                AIMessage(content="Tavily search skipped - missing API keys")
+                AIMessage(content="Tavily search skipped - no API key or client initialization failed")
+            )
+            return state
+            
+        if not self.llm:
+            logger.warning("Tavily search disabled - no OpenAI client for result processing")
+            state['tavily_search_results'] = []
+            state['messages'].append(
+                AIMessage(content="Tavily search skipped - no OpenAI client")
             )
             return state
         
@@ -1380,7 +1395,7 @@ class SummaryNode:
             Sources: Google Maps ({summary['sources_used']['google_maps']}), 
             Tavily ({summary['sources_used']['tavily']}),
             Website ({summary['sources_used']['website']}),
-            SEC ({summary['sources_used']['sec']}).
+            Directory ({summary['sources_used']['directory']}).
             Brief 2-sentence summary."""
             
             try:

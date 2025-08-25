@@ -19,6 +19,7 @@ langgraph>=0.0.20
 
 # External APIs
 googlemaps==4.10.0
+tavily-python>=0.3.0
 
 # Export Dependencies
 openpyxl==3.1.2
