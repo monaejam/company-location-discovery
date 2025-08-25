@@ -14,13 +14,40 @@ from loguru import logger
 import tempfile
 import os
 from functools import lru_cache
-import diskcache as dc
+try:
+    import diskcache as dc
+    CACHE_AVAILABLE = True
+except ImportError:
+    logger.warning("diskcache not available - using memory-only cache")
+    CACHE_AVAILABLE = False
+    dc = None
 
-# Import the enhanced workflow
-from master_discovery_workflow import SuperEnhancedDiscoveryWorkflow
+# Import the enhanced workflow with error handling
+try:
+    from master_discovery_workflow import SuperEnhancedDiscoveryWorkflow
+    WORKFLOW_AVAILABLE = True
+    logger.info("Successfully imported SuperEnhancedDiscoveryWorkflow")
+except Exception as e:
+    logger.error(f"Failed to import workflow: {e}")
+    WORKFLOW_AVAILABLE = False
+    SuperEnhancedDiscoveryWorkflow = None
 
-# Initialize disk cache for persistent caching
-cache = dc.Cache('data/cache', size_limit=100_000_000)  # 100MB cache limit
+# Initialize disk cache for persistent caching (create directory if needed)
+import pathlib
+if CACHE_AVAILABLE:
+    try:
+        cache_dir = pathlib.Path('data/cache')
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache = dc.Cache(str(cache_dir), size_limit=100_000_000)  # 100MB cache limit
+        logger.info(f"Cache initialized at {cache_dir}")
+    except Exception as e:
+        logger.warning(f"Cache initialization failed: {e}. Using memory-only cache.")
+        # Create a dummy cache that doesn't persist
+        cache = dc.Cache(size_limit=10_000_000)  # 10MB memory-only cache
+else:
+    # Fallback to simple dict-based cache
+    logger.info("Using simple dict-based cache as fallback")
+    cache = {}
 
 # Cached functions for memory optimization
 @lru_cache(maxsize=32)
@@ -32,6 +59,12 @@ def get_cached_workflow(api_keys_hash: str, output_dir: str = "temp/output"):
 
 def create_workflow_with_cache(api_keys: dict, output_dir: str = "temp/output"):
     """Create workflow with intelligent caching"""
+    if not WORKFLOW_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Workflow system is not available. Please check server logs."
+        )
+    
     # Create a cache key based on provided API keys (not their values for security)
     key_types = tuple(sorted([k for k, v in api_keys.items() if v]))
     cache_key = f"workflow_{hash(key_types)}"
@@ -45,13 +78,23 @@ def create_workflow_with_cache(api_keys: dict, output_dir: str = "temp/output"):
 def get_cached_company_result(company_name: str, company_url: str = None):
     """Check if we have cached results for this company"""
     cache_key = f"company_{company_name.lower().replace(' ', '_')}_{hash(company_url or '')}"
-    return cache.get(cache_key)
+    if CACHE_AVAILABLE and hasattr(cache, 'get'):
+        return cache.get(cache_key)
+    else:
+        return cache.get(cache_key, None)
 
 def cache_company_result(company_name: str, company_url: str, result: dict, ttl: int = 3600):
     """Cache company discovery results for 1 hour by default"""
     cache_key = f"company_{company_name.lower().replace(' ', '_')}_{hash(company_url or '')}"
-    cache.set(cache_key, result, expire=ttl)
-    logger.info(f"Cached results for {company_name} (TTL: {ttl}s)")
+    try:
+        if CACHE_AVAILABLE and hasattr(cache, 'set'):
+            cache.set(cache_key, result, expire=ttl)
+        else:
+            # Simple dict cache (no TTL support)
+            cache[cache_key] = result
+        logger.info(f"Cached results for {company_name} (TTL: {ttl}s)")
+    except Exception as e:
+        logger.warning(f"Failed to cache results: {e}")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -132,11 +175,19 @@ async def root():
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Simple health check endpoint"""
+    """Enhanced health check endpoint"""
+    try:
+        cache_size = len(cache) if cache else 0
+    except:
+        cache_size = 0
+        
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "cors_enabled": True
+        "cors_enabled": True,
+        "workflow_available": WORKFLOW_AVAILABLE,
+        "cache_available": CACHE_AVAILABLE,
+        "cache_size": cache_size
     }
 
 @app.post("/discover/single", tags=["Discovery"])
