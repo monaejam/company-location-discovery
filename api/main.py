@@ -20,8 +20,8 @@ from master_discovery_workflow import SuperEnhancedDiscoveryWorkflow
 # Initialize FastAPI app
 app = FastAPI(
     title="Company Location Discovery API",
-    description="Multi-agent AI system for discovering company locations worldwide - users provide their own API keys",
-    version="2.0.0",
+    description="Enhanced multi-agent AI system for discovering company locations worldwide - users provide their own API keys",
+    version="2.0.1",
     docs_url="/docs",
     redoc_url="/redoc"
 )
