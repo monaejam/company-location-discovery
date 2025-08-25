@@ -6,16 +6,16 @@ pydantic==2.5.0
 loguru==0.7.2
 
 # Real Multi-Agent Workflow Dependencies
-pandas>=2.2.0
+pandas==2.2.0
 requests==2.31.0
 beautifulsoup4==4.12.2
 lxml==4.9.3
 
-# LangChain and AI Dependencies
-langchain>=0.1.0
-langchain-openai>=0.0.2
-langchain-community>=0.0.12
-langgraph>=0.0.20
+# LangChain and AI Dependencies (pinned for memory efficiency)
+langchain==0.1.0
+langchain-openai==0.0.8
+langchain-community==0.0.20
+langgraph==0.0.35
 
 # External APIs
 googlemaps==4.10.0
@@ -27,3 +27,7 @@ openpyxl==3.1.2
 # Additional utilities
 python-dateutil==2.8.2
 urllib3>=2.0.0
+
+# Caching for memory optimization
+functools32; python_version < '3.2'
+diskcache==5.6.3

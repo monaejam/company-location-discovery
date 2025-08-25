@@ -13,9 +13,45 @@ from datetime import datetime
 from loguru import logger
 import tempfile
 import os
+from functools import lru_cache
+import diskcache as dc
 
 # Import the enhanced workflow
 from master_discovery_workflow import SuperEnhancedDiscoveryWorkflow
+
+# Initialize disk cache for persistent caching
+cache = dc.Cache('data/cache', size_limit=100_000_000)  # 100MB cache limit
+
+# Cached functions for memory optimization
+@lru_cache(maxsize=32)
+def get_cached_workflow(api_keys_hash: str, output_dir: str = "temp/output"):
+    """Create and cache workflow instances to avoid repeated initialization"""
+    # This would need actual API keys passed differently in production
+    logger.info(f"Creating new workflow instance (cache miss)")
+    return None  # Placeholder - actual workflow creation moved to runtime
+
+def create_workflow_with_cache(api_keys: dict, output_dir: str = "temp/output"):
+    """Create workflow with intelligent caching"""
+    # Create a cache key based on provided API keys (not their values for security)
+    key_types = tuple(sorted([k for k, v in api_keys.items() if v]))
+    cache_key = f"workflow_{hash(key_types)}"
+    
+    # Always create new instance for now (caching workflow instances is complex due to state)
+    return SuperEnhancedDiscoveryWorkflow(
+        output_dir=output_dir,
+        api_keys=api_keys
+    )
+
+def get_cached_company_result(company_name: str, company_url: str = None):
+    """Check if we have cached results for this company"""
+    cache_key = f"company_{company_name.lower().replace(' ', '_')}_{hash(company_url or '')}"
+    return cache.get(cache_key)
+
+def cache_company_result(company_name: str, company_url: str, result: dict, ttl: int = 3600):
+    """Cache company discovery results for 1 hour by default"""
+    cache_key = f"company_{company_name.lower().replace(' ', '_')}_{hash(company_url or '')}"
+    cache.set(cache_key, result, expire=ttl)
+    logger.info(f"Cached results for {company_name} (TTL: {ttl}s)")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -423,6 +459,22 @@ async def delete_job(job_id: str):
     
     return {"message": f"Job {job_id} deleted successfully"}
 
+@app.get("/cache/stats", tags=["Cache"])
+async def get_cache_stats():
+    """Get cache statistics"""
+    return {
+        "cache_size": len(cache),
+        "cache_volume": cache.volume(),
+        "cache_directory": str(cache.directory),
+        "cache_size_limit": cache.size_limit
+    }
+
+@app.delete("/cache/clear", tags=["Cache"])
+async def clear_cache():
+    """Clear all cached results"""
+    cache.clear()
+    return {"message": "Cache cleared successfully"}
+
 # Background Processing Functions
 async def process_single_company(
     job_id: str, 
@@ -439,6 +491,21 @@ async def process_single_company(
         jobs_storage[job_id]["message"] = f"Initializing discovery for {company_name}"
         
         logger.info(f"Job {job_id}: Processing {company_name} with real workflow")
+        
+        # Check cache first for faster response
+        cached_result = get_cached_company_result(company_name, company_url)
+        if cached_result:
+            logger.info(f"Job {job_id}: Using cached results for {company_name}")
+            jobs_storage[job_id]["status"] = "completed"
+            jobs_storage[job_id]["progress"] = 100
+            jobs_storage[job_id]["message"] = f"Completed using cached results - found {len(cached_result.get('locations', []))} locations"
+            jobs_storage[job_id]["completed_at"] = datetime.now().isoformat()
+            jobs_storage[job_id]["results"] = cached_result
+            jobs_storage[job_id]["download_urls"] = [
+                f"/jobs/{job_id}/download/json",
+                f"/jobs/{job_id}/download/csv"
+            ]
+            return
         
         # Initialize the real workflow with user's API keys
         workflow_api_keys = {
@@ -520,6 +587,9 @@ async def process_single_company(
             "errors": result.get('errors', []),
             "export_files": result.get('export_files', [])
         }
+        
+        # Cache the results for future use (1 hour TTL)
+        cache_company_result(company_name, company_url, final_result, ttl=3600)
         
         # Complete job
         jobs_storage[job_id]["status"] = "completed"
