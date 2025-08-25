@@ -58,16 +58,23 @@ class SimpleDiscoveryWorkflow:
             'errors': ['Using fallback discovery mode']
         }
 
-# Import the enhanced workflow with error handling
+# Import the workflow with fallback handling
 try:
-    from master_discovery_workflow import SuperEnhancedDiscoveryWorkflow
+    # Try simplified workflow first (Railway-optimized)
+    from simplified_discovery_workflow import SimplifiedDiscoveryWorkflow as SuperEnhancedDiscoveryWorkflow
     WORKFLOW_AVAILABLE = True
-    logger.info("Successfully imported SuperEnhancedDiscoveryWorkflow")
+    logger.info("Successfully imported SimplifiedDiscoveryWorkflow (Railway-optimized)")
 except Exception as e:
-    logger.error(f"Failed to import workflow: {e}")
-    logger.error(f"Error details: {type(e).__name__}: {str(e)}")
-    WORKFLOW_AVAILABLE = False
-    SuperEnhancedDiscoveryWorkflow = SimpleDiscoveryWorkflow
+    logger.warning(f"Failed to import simplified workflow: {e}")
+    try:
+        # Fallback to full workflow
+        from master_discovery_workflow import SuperEnhancedDiscoveryWorkflow
+        WORKFLOW_AVAILABLE = True
+        logger.info("Successfully imported SuperEnhancedDiscoveryWorkflow (full version)")
+    except Exception as e2:
+        logger.error(f"Failed to import any workflow: {e2}")
+        WORKFLOW_AVAILABLE = False
+        SuperEnhancedDiscoveryWorkflow = SimpleDiscoveryWorkflow
 
 # Initialize disk cache for persistent caching (create directory if needed)
 import pathlib
