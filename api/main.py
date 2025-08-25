@@ -513,18 +513,40 @@ async def delete_job(job_id: str):
 @app.get("/cache/stats", tags=["Cache"])
 async def get_cache_stats():
     """Get cache statistics"""
-    return {
-        "cache_size": len(cache),
-        "cache_volume": cache.volume(),
-        "cache_directory": str(cache.directory),
-        "cache_size_limit": cache.size_limit
-    }
+    try:
+        if CACHE_AVAILABLE and hasattr(cache, 'volume'):
+            return {
+                "cache_size": len(cache),
+                "cache_volume": cache.volume(),
+                "cache_directory": str(cache.directory),
+                "cache_size_limit": cache.size_limit
+            }
+        else:
+            return {
+                "cache_size": len(cache) if cache else 0,
+                "cache_type": "fallback_dict",
+                "cache_available": CACHE_AVAILABLE
+            }
+    except Exception as e:
+        logger.error(f"Cache stats error: {e}")
+        return {
+            "cache_size": 0,
+            "error": str(e),
+            "cache_available": CACHE_AVAILABLE
+        }
 
 @app.delete("/cache/clear", tags=["Cache"])
 async def clear_cache():
     """Clear all cached results"""
-    cache.clear()
-    return {"message": "Cache cleared successfully"}
+    try:
+        if CACHE_AVAILABLE and hasattr(cache, 'clear'):
+            cache.clear()
+        elif isinstance(cache, dict):
+            cache.clear()
+        return {"message": "Cache cleared successfully"}
+    except Exception as e:
+        logger.error(f"Cache clear error: {e}")
+        return {"message": f"Cache clear failed: {str(e)}"}
 
 # Background Processing Functions
 async def process_single_company(
