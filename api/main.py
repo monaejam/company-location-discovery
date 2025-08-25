@@ -442,6 +442,10 @@ async def process_single_company(
             'tavily_api_key': api_keys.tavily_api_key
         }
         
+        # Log which API keys are provided
+        provided_keys = [k for k, v in workflow_api_keys.items() if v]
+        logger.info(f"Job {job_id}: API keys provided: {provided_keys}")
+        
         jobs_storage[job_id]["progress"] = 20
         jobs_storage[job_id]["message"] = "Starting multi-agent workflow..."
         
@@ -459,6 +463,12 @@ async def process_single_company(
             company_name=company_name,
             company_url=company_url
         )
+        
+        # Debug: Log what we got back
+        logger.info(f"Job {job_id}: Workflow result summary: {result.get('summary', {})}")
+        logger.info(f"Job {job_id}: Found {len(result.get('locations', []))} locations")
+        logger.info(f"Job {job_id}: Messages: {result.get('messages', [])}")
+        logger.info(f"Job {job_id}: Errors: {result.get('errors', [])}")
         
         jobs_storage[job_id]["progress"] = 90
         jobs_storage[job_id]["message"] = "Processing results..."

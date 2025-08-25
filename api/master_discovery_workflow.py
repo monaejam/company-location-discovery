@@ -278,12 +278,19 @@ class ImprovedWebScraperAgentNode:
         logger.info(f"Web Scraper: Raw URL: '{raw_url}' -> Cleaned URL: '{company_url}'")
         
         if not company_url:
-            logger.warning(f"No valid URL for {state['company_name']} (raw: '{raw_url}')")
-            state['web_scraper_results'] = []
-            state['messages'].append(
-                AIMessage(content=f"Web scraper skipped - no valid URL provided (got: '{raw_url}')")
-            )
-            return state
+            logger.info(f"No URL provided for {state['company_name']}, trying to find company website")
+            # Try to find the company website using search
+            company_url = self._find_company_website(state['company_name'])
+            
+            if not company_url:
+                logger.warning(f"Could not find website for {state['company_name']}")
+                state['web_scraper_results'] = []
+                state['messages'].append(
+                    AIMessage(content=f"Web scraper skipped - no URL provided and could not find company website")
+                )
+                return state
+            else:
+                logger.info(f"Found website for {state['company_name']}: {company_url}")
         
         logger.info(f"Web Scraper: Processing {company_url} for {state['company_name']}")
         
@@ -514,35 +521,184 @@ class ImprovedWebScraperAgentNode:
         
         return locations
     
+    def _find_company_website(self, company_name: str) -> str:
+        """Try to find company website using basic search patterns"""
+        try:
+            # Try common website patterns
+            potential_urls = [
+                f"https://www.{company_name.lower().replace(' ', '')}.com",
+                f"https://{company_name.lower().replace(' ', '')}.com",
+                f"https://www.{company_name.lower().replace(' ', '-')}.com",
+                f"https://{company_name.lower().replace(' ', '-')}.com"
+            ]
+            
+            for url in potential_urls:
+                try:
+                    response = self.session.head(url, timeout=5, allow_redirects=True)
+                    if response.status_code == 200:
+                        logger.info(f"Found working URL: {url}")
+                        return url
+                except:
+                    continue
+            
+            return ""
+            
+        except Exception as e:
+            logger.error(f"Error finding website for {company_name}: {e}")
+            return ""
+    
 
 class SECFilingAgentNode:
-    """SEC filing agent for subsidiary information"""
+    """SEC filing agent for subsidiary and location information"""
     
     def __init__(self):
+        try:
+            self.llm = ChatOpenAI(
+                temperature=0,
+                model="gpt-4o-mini",
+                api_key=os.getenv("OPENAI_API_KEY")
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI client for SEC agent: {e}")
+            self.llm = None
         logger.info("SEC Filing Agent Node initialized")
     
     def run(self, state: DiscoveryState) -> DiscoveryState:
-        """Extract from SEC filings (mock for now)"""
+        """Extract from SEC filings using EDGAR database"""
         if state.get('sec_filing_results') is not None:
             return state
         
-        # Mock implementation - replace with real SEC API later
-        locations = [
-            {
-                'name': f"{state['company_name']} Subsidiary",
-                'city': 'Delaware',
-                'country': 'USA',
-                'source': 'sec_filing',
-                'confidence': 0.9
-            }
-        ]
+        if not self.llm:
+            logger.warning("SEC agent disabled - no OpenAI client")
+            state['sec_filing_results'] = []
+            return state
         
-        state['sec_filing_results'] = locations
-        state['messages'].append(
-            AIMessage(content=f"SEC filings found {len(locations)} subsidiaries")
-        )
+        logger.info(f"SEC: Searching for {state['company_name']}")
+        
+        try:
+            locations = []
+            
+            # Search SEC EDGAR database
+            company_data = self._search_edgar(state['company_name'])
+            
+            if company_data:
+                # Extract locations using LLM
+                locations = self._extract_locations_from_filings(
+                    company_data, 
+                    state['company_name']
+                )
+            
+            state['sec_filing_results'] = locations
+            state['messages'].append(
+                AIMessage(content=f"SEC EDGAR found {len(locations)} locations")
+            )
+            logger.info(f"SEC: Found {len(locations)} locations")
+            
+        except Exception as e:
+            logger.error(f"SEC error: {e}")
+            state['sec_filing_results'] = []
+            state['errors'].append(f"SEC search error: {str(e)}")
         
         return state
+    
+    def _search_edgar(self, company_name: str) -> str:
+        """Search SEC EDGAR database for company information"""
+        try:
+            # Use SEC EDGAR API (no API key required, but rate limited)
+            headers = {
+                'User-Agent': 'Company Discovery Bot contact@example.com',
+                'Accept-Encoding': 'gzip, deflate',
+                'Host': 'www.sec.gov'
+            }
+            
+            # Search for company CIK (Central Index Key)
+            search_url = f"https://www.sec.gov/cgi-bin/browse-edgar"
+            params = {
+                'action': 'getcompany',
+                'company': company_name,
+                'output': 'atom',
+                'count': '5'
+            }
+            
+            response = requests.get(search_url, params=params, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                # Parse the response to get company filings info
+                content = response.text
+                
+                # Look for recent 10-K or 10-Q filings that might contain location info
+                if 'entry' in content and len(content) > 100:
+                    return content[:5000]  # Limit content size
+            
+            logger.warning(f"SEC search returned status {response.status_code}")
+            return ""
+            
+        except Exception as e:
+            logger.error(f"EDGAR search error: {e}")
+            return ""
+    
+    def _extract_locations_from_filings(self, filing_data: str, company_name: str) -> List[Dict]:
+        """Extract location information from SEC filing data using LLM"""
+        locations = []
+        
+        if not filing_data or len(filing_data) < 50:
+            return locations
+        
+        prompt = f"""Extract business locations, subsidiaries, and office addresses for {company_name} from this SEC filing data.
+
+Look for:
+- Corporate headquarters addresses
+- Subsidiary company locations
+- Manufacturing facilities
+- Sales offices
+- Distribution centers
+- Any physical business addresses mentioned
+
+Filing data:
+{filing_data}
+
+Return a JSON array of locations with these fields:
+- name: Location or subsidiary name
+- address: Full address if available
+- city: City name
+- state: State/province if available
+- country: Country name
+- subsidiary_type: Type (e.g., "headquarters", "subsidiary", "facility")
+
+Return ONLY the JSON array, no other text. If no locations found, return empty array [].
+"""
+        
+        try:
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            
+            # Parse response
+            import re
+            json_match = re.search(r'\[.*?\]', response.content, re.DOTALL)
+            if json_match:
+                try:
+                    locs = json.loads(json_match.group())
+                    for loc in locs:
+                        if loc.get('city'):  # Must have at least a city
+                            location = {
+                                'name': loc.get('name', f"{company_name} - {loc.get('city', 'Unknown')}"),
+                                'address': loc.get('address', ''),
+                                'city': loc.get('city', ''),
+                                'state': loc.get('state', ''),
+                                'country': loc.get('country', 'USA'),  # Default to USA for SEC filings
+                                'postal_code': '',
+                                'phone': '',
+                                'subsidiary_type': loc.get('subsidiary_type', 'subsidiary'),
+                                'source': 'sec_filing',
+                                'confidence': 0.85
+                            }
+                            locations.append(location)
+                except json.JSONDecodeError as e:
+                    logger.error(f"SEC JSON parse error: {e}")
+        
+        except Exception as e:
+            logger.error(f"SEC LLM extraction error: {e}")
+        
+        return locations
 
 
 class AggregatorNode:
@@ -1082,7 +1238,7 @@ class EnhancedDiscoveryWorkflow:
         # Store API keys
         self.api_keys = api_keys or {}
         
-        # Set environment variables from API keys if provided
+        # Set environment variables from API keys if provided FIRST
         if api_keys:
             if api_keys.get('openai_api_key'):
                 os.environ['OPENAI_API_KEY'] = api_keys['openai_api_key']
@@ -1091,9 +1247,9 @@ class EnhancedDiscoveryWorkflow:
             if api_keys.get('tavily_api_key'):
                 os.environ['TAVILY_API_KEY'] = api_keys['tavily_api_key']
         
-        # Initialize all nodes
-        self.google_maps_node = EnhancedGoogleMapsAgentNode()
-        self.tavily_node = TavilySearchAgentNode()
+        # Initialize all nodes AFTER setting environment variables
+        self.google_maps_node = EnhancedGoogleMapsAgentNode(api_key=api_keys.get('google_maps_api_key') if api_keys else None)
+        self.tavily_node = TavilySearchAgentNode(tavily_api_key=api_keys.get('tavily_api_key') if api_keys else None)
         self.web_scraper_node = ImprovedWebScraperAgentNode()
         self.sec_filing_node = SECFilingAgentNode()
         self.aggregator_node = AggregatorNode()
@@ -1105,7 +1261,7 @@ class EnhancedDiscoveryWorkflow:
         
         # Build the graph
         self.graph = self._build_graph()
-        logger.info("Enhanced Discovery Workflow initialized")
+        logger.info(f"Enhanced Discovery Workflow initialized with API keys: {list(api_keys.keys()) if api_keys else 'None'}")
     
     def _build_graph(self) -> StateGraph:
         """Build the workflow graph"""
