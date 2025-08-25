@@ -235,15 +235,20 @@ class TavilySearchAgentNode:
 Extract locations for {state['company_name']} ONLY from this text:
 {content}
 
-RULES:
-1. ONLY extract locations that are explicitly stated in the text
-2. DO NOT create fake or assumed locations  
-3. DO NOT generate locations based on company name alone
-4. If no specific addresses or locations are found, return empty array []
-5. Only include locations with city names that appear in the text
+STRICT RULES:
+1. ONLY extract locations that are explicitly stated in the text with REAL addresses
+2. DO NOT create fake locations like "Amsterdam", "Rotterdam", "Nijmegen" unless they have specific street addresses in the text
+3. DO NOT generate locations based on company name, industry, or assumptions
+4. DO NOT create generic city lists for petroleum/oil companies
+5. If no specific street addresses or office locations are found, return empty array []
+6. Only include locations that have concrete address details (street names, building numbers, etc.)
+
+REQUIRED: Each location must have either:
+- A specific street address (e.g., "123 Main Street, Houston, TX")
+- OR a specific building/facility name with location details
 
 Return ONLY a JSON array with: name, city, country, address for REAL locations found.
-If NO specific locations found, return: []"""
+If NO specific addresses/facilities are mentioned in the text, return: []"""
                 
                 response = self.llm.invoke([HumanMessage(content=prompt)])
                 
@@ -253,7 +258,44 @@ If NO specific locations found, return: []"""
                     try:
                         locs = json.loads(json_match.group())
                         for loc in locs:
-                            if loc.get('city'):
+                            city = loc.get('city', '').lower()
+                            address = loc.get('address', '').lower()
+                            name = loc.get('name', '').lower()
+                            
+                            # Skip if no city or obvious fake patterns
+                            if not city:
+                                continue
+                                
+                            # Filter out suspicious patterns that indicate fake data
+                            suspicious_patterns = [
+                                'amsterdam', 'rotterdam', 'nijmegen', 'zaandam', 
+                                'various', 'multiple', 'different', 'several',
+                                'example', 'sample', 'test', 'unknown',
+                                'not specified', 'not available', 'tbd'
+                            ]
+                            
+                            # Check if this looks like a fake location
+                            is_suspicious = any(pattern in city or pattern in address or pattern in name 
+                                              for pattern in suspicious_patterns)
+                            
+                            # Only add if it has real address components or specific details
+                            has_real_address = (
+                                loc.get('address') and 
+                                len(loc.get('address', '').strip()) > 10 and
+                                any(indicator in address for indicator in ['street', 'avenue', 'road', 'drive', 'suite', 'floor', 'building'])
+                            )
+                            
+                            # Skip suspicious entries unless they have concrete address details
+                            if is_suspicious and not has_real_address:
+                                logger.info(f"Tavily: Filtered suspicious location: {city} - {address}")
+                                continue
+                            
+                            # Skip entries with no real address information
+                            if not loc.get('address') or len(loc.get('address', '').strip()) < 5:
+                                logger.info(f"Tavily: Skipped location with no address: {city}")
+                                continue
+                                
+                            if city:
                                 loc['source'] = 'tavily'
                                 loc['confidence'] = 0.75
                                 locations.append(loc)
