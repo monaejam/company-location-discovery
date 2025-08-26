@@ -4,8 +4,8 @@
 
 ## 🏗️ Architecture
 
-- **Backend**: FastAPI (Python) - Deployed on Vercel
-- **Frontend**: Next.js (TypeScript/React) - Deployed on Vercel
+- **Backend**: FastAPI (Python) - Containerized deployment
+- **Frontend**: Next.js (TypeScript/React) - Static site generation
 - **API Keys**: User-provided (no server-side storage)
 - **Database**: In-memory storage (jobs are temporary)
 
@@ -44,28 +44,55 @@ Frontend will be available at: `http://localhost:3000`
 
 ## 🌐 Deployment
 
-### Deploy Backend to Vercel
+### Railway Deployment (Recommended)
 
-1. **Push to GitHub** (if not already done)
-2. **Connect to Vercel**:
-   - Go to [vercel.com](https://vercel.com)
-   - Import your GitHub repository
-   - Set root directory to `api/`
-   - Deploy
+This project is optimized for Railway deployment with automatic Docker builds and seamless scaling.
 
-3. **Get your backend URL**: `https://your-backend.vercel.app`
+#### Deploy Backend to Railway
 
-### Deploy Frontend to Vercel
+1. **Create Railway Account**: Sign up at [railway.app](https://railway.app)
+2. **Connect Repository**: Link your GitHub repository
+3. **Deploy Backend**:
+   ```bash
+   cd api
+   railway login
+   railway init
+   railway up
+   ```
+4. **Configure**: Railway automatically detects the Dockerfile and builds
+5. **Get URL**: Railway provides your backend URL (e.g., `https://your-app.up.railway.app`)
 
-1. **Set Environment Variable**:
-   - In Vercel dashboard, go to your frontend project
-   - Settings → Environment Variables
-   - Add: `NEXT_PUBLIC_API_URL` = `https://your-backend.vercel.app`
+#### Deploy Frontend to Railway
 
-2. **Deploy**:
-   - Connect your GitHub repository
-   - Set root directory to `frontend/`
-   - Deploy
+1. **Deploy Frontend**:
+   ```bash
+   cd frontend
+   railway init
+   railway up
+   ```
+2. **Set Environment Variables** in Railway dashboard:
+   - `NEXT_PUBLIC_API_URL`: Your backend Railway URL
+   - `NODE_ENV`: `production`
+
+#### Alternative: Monorepo Deployment
+
+Deploy both services from root directory using the included `railway.json` configuration:
+```bash
+railway init
+railway up
+```
+
+### Other Deployment Options
+
+- **Local/VPS**: Direct deployment with uvicorn and npm
+- **Docker**: Use included Dockerfiles for containerized deployment
+- **Static Export**: Build frontend as static files for CDN hosting
+
+### Environment Configuration
+- **Frontend**: `NEXT_PUBLIC_API_URL` - Your backend API URL
+- **Backend**: No environment variables needed (users provide API keys)
+
+For detailed deployment instructions, see `DEPLOYMENT_PROFESSIONAL.md`
 
 ## 📋 Features
 
@@ -129,13 +156,15 @@ My-own-project/
 ├── api/                    # FastAPI backend
 │   ├── main.py            # Main FastAPI application
 │   ├── requirements.txt   # Python dependencies
-│   └── vercel.json       # Vercel deployment config
+│   ├── Dockerfile         # Docker configuration
+│   └── railway.json      # Railway deployment config
 ├── frontend/              # Next.js frontend
 │   ├── app/              # Next.js app directory
 │   ├── components/       # React components
 │   ├── lib/              # Utilities and API client
 │   ├── package.json      # Node.js dependencies
-│   └── vercel.json       # Vercel deployment config
+│   ├── Dockerfile         # Docker configuration
+│   └── railway.json      # Railway deployment config
 └── README.md             # This file
 ```
 
